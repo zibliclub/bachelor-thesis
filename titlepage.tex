@@ -1,0 +1,92 @@
+% Титульный лист ВКР по образцу ОмГУ им. Ф.М. Достоевского.
+% Все данные берутся из meta.tex.
+
+\RequirePackage{etoolbox}
+\newcommand{\thesisProgramLine}{%
+  \ifdefstring{\thethesisProgramKind}{specialty}%
+    {по специальности \thethesisProgramCode\,--\,\thethesisProgramName}%
+    {по направлению \thethesisProgramCode\,--\,\thethesisProgramName}%
+}
+
+\newcommand{\thesisSignatureLine}{%
+  \rule{2.2cm}{0.4pt}%
+}
+
+\newcommand{\thesisDateLine}{%
+  «\rule{0.8cm}{0.4pt}»~\rule{2.5cm}{0.4pt}~\thethesisYear~г.%
+}
+
+\newcommand{\makethesistitle}{%
+  \begin{titlepage}%
+    \thispagestyle{thesistitle}%
+    \begin{singlespace}%
+    \setlength{\parindent}{0pt}%
+    \begin{center}
+      \textbf{\thethesisMinistry}\\[2pt]
+      \thethesisInstitutionLong\\[2pt]
+      \thethesisUniversity\\[2pt]
+      \thethesisDepartment
+    \end{center}
+
+    \vspace{12mm}
+
+    % Блок «УТВЕРЖДАЮ» — справа
+    \begin{flushright}
+      \begin{minipage}{0.55\textwidth}
+        \raggedright
+        УТВЕРЖДАЮ\\
+        Заведующий кафедрой\\[2pt]
+        \thesisSignatureLine\,\thethesisHeadName\\[2pt]
+        \thesisDateLine
+      \end{minipage}
+    \end{flushright}
+
+    \vspace{20mm}
+
+    % Название работы
+    \begin{center}
+      {\fontsize{16pt}{20pt}\selectfont\bfseries \thethesisTitle\par}
+
+      \vspace{10mm}
+
+      Выпускная квалификационная работа\\
+      \thesisProgramLine
+    \end{center}
+
+    \vspace{18mm}
+
+    % Научный руководитель
+    \begin{flushright}
+      \begin{minipage}{0.55\textwidth}
+        \raggedright
+        Научный руководитель:\\
+        \thethesisAdvisorRank\\[2pt]
+        \thesisSignatureLine\,\thethesisAdvisorName\\[2pt]
+        \thesisDateLine
+      \end{minipage}
+    \end{flushright}
+
+    \vspace{10mm}
+
+    % Студент
+    \begin{flushright}
+      \begin{minipage}{0.55\textwidth}
+        \raggedright
+        Выполнил(а):\\
+        студент(ка) группы \thethesisStudentGroup\\[2pt]
+        \thesisSignatureLine\,\thethesisStudentName\\[2pt]
+        \thesisDateLine
+      \end{minipage}
+    \end{flushright}
+
+    \vfill
+
+    \begin{center}
+      \thethesisCity\\
+      \thethesisYear
+    \end{center}
+    \end{singlespace}%
+  \end{titlepage}%
+  % Титульный лист — первая страница, но номер на нём не печатается.
+  \setcounter{page}{2}%
+}

@@ -1,0 +1,53 @@
+name: Build and release PDF
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build, e.g. v2026.05.12'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      # Полный образ TeX Live: содержит cm-unicode (CMU Serif) и lualatex.
+      image: texlive/texlive:latest
+    steps:
+      - name: Allow git to read the workspace
+        run: git config --global --add safe.directory '*'
+
+      - name: Checkout (tag from workflow_dispatch or pushed ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Install build utilities
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends make
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Build PDF
+        run: |
+          set -eux
+          make build
+          mkdir -p dist
+          cp out/main.pdf dist/bachelor-thesis.pdf
+          ls -la dist/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/bachelor-thesis.pdf
+          generate_release_notes: true
+          fail_on_unmatched_files: true
