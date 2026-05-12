@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      # Полный образ TeX Live: содержит cm-unicode (CMU Serif) и lualatex.
+      # Full TeX Live image: ships cm-unicode (CMU Serif) and lualatex.
       image: texlive/texlive:latest
     steps:
       - name: Allow git to read the workspace

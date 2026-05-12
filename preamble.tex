@@ -1,16 +1,15 @@
-% Преамбула: пакеты, геометрия, шрифты, оформление заголовков.
-% Требования см. в requirements.md и CLAUDE.md.
-% Движок: LuaLaTeX.
+% Preamble: packages, geometry, fonts, heading style, metadata API.
+% Engine: LuaLaTeX. Formatting requirements: see requirements.md and CLAUDE.md.
 
-% --- Язык ------------------------------------------------------------------
+% --- Language --------------------------------------------------------------
 \usepackage{polyglossia}
 \setdefaultlanguage{russian}
 \setotherlanguage{english}
 
-% --- Шрифты ----------------------------------------------------------------
-% CMU Serif — Computer Modern Unicode (cm-unicode), кириллица + латиница.
-% Соответствует требованию CLAUDE.md: «Times или Computer Modern».
-% Пакет: texlive-fontsextra (Arch).
+% --- Fonts -----------------------------------------------------------------
+% CMU Serif = Computer Modern Unicode (cm-unicode), covers Latin + Cyrillic.
+% Satisfies the "Times or Computer Modern" requirement from CLAUDE.md.
+% Shipped by texlive-fontsextra (Arch) / cm-unicode (TeX Live).
 \usepackage{fontspec}
 \defaultfontfeatures{Ligatures=TeX}
 \setmainfont{CMU Serif}
@@ -20,19 +19,19 @@
 \newfontfamily\cyrillicfontsf{CMU Sans Serif}
 \newfontfamily\cyrillicfonttt{CMU Typewriter Text}
 
-% --- Геометрия страницы ----------------------------------------------------
+% --- Page geometry ---------------------------------------------------------
 \usepackage[a4paper, top=2cm, bottom=2cm, left=3cm, right=1cm]{geometry}
 
-% --- Межстрочный интервал --------------------------------------------------
+% --- Line spacing ----------------------------------------------------------
 \usepackage{setspace}
 \onehalfspacing
 
-% --- Абзацный отступ -------------------------------------------------------
+% --- Paragraph indent ------------------------------------------------------
 \usepackage{indentfirst}
 \setlength{\parindent}{1.25cm}
 \setlength{\parskip}{0pt}
 
-% --- Графика, таблицы, математика ------------------------------------------
+% --- Graphics, tables, math ------------------------------------------------
 \usepackage{graphicx}
 \graphicspath{{images/}}
 \usepackage{amsmath, amssymb}
@@ -41,9 +40,9 @@
 \usepackage{longtable}
 \usepackage{caption}
 
-% --- Подписи рисунков и таблиц по требованиям ------------------------------
-% Рисунок: подпись снизу по центру, формат «Рис. N. Название».
-% Таблица: подпись сверху справа, шрифт 12pt, формат «Таблица N. Название».
+% --- Figure and table captions per requirements ----------------------------
+% Figure: caption below, centered, format "Рис. N. Title".
+% Table:  caption above, right-aligned, 12pt, format "Таблица N. Title".
 \captionsetup[figure]{
   name=Рис.,
   labelsep=period,
@@ -60,7 +59,7 @@
   position=above
 }
 
-% --- Нумерация страниц: внизу по центру, сквозная --------------------------
+% --- Page numbering: bottom center, continuous -----------------------------
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
@@ -68,17 +67,16 @@
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{0pt}
 
-% Стиль для титульного листа: без номера, но страница считается первой.
+% Title-page style: no number printed, but the page still counts as page 1.
 \fancypagestyle{thesistitle}{%
   \fancyhf{}%
   \renewcommand{\headrulewidth}{0pt}%
   \renewcommand{\footrulewidth}{0pt}%
 }
 
-% --- Оформление заголовков (требование: строчные с первой прописной, ------
-% полужирные, по левому краю с абзацным отступом, без точки в конце) -------
-% Главы (\section): 16pt; разделы и подразделы: 14pt; всё полужирное,
-% по левому краю с абзацным отступом, без точки в конце.
+% --- Heading style ---------------------------------------------------------
+% Chapters (\section): 16pt; sections and subsections: 14pt.
+% All headings: bold, left-aligned with paragraph indent, no trailing period.
 \usepackage{titlesec}
 \titleformat{\section}
   {\normalfont\fontsize{16pt}{19pt}\bfseries}
@@ -90,8 +88,8 @@
   {\normalfont\fontsize{14pt}{17pt}\bfseries}
   {\thesubsubsection.}{0.5em}{}
 
-% Введение/Заключение/Список литературы/Приложения/Содержание — без номера,
-% с новой страницы, с абзацным отступом, по левому краю, размер главы.
+% Unnumbered chapter-level headings — Introduction, Conclusion, References,
+% Appendices, Table of Contents. New page, paragraph indent, left-aligned, 16pt bold.
 \newcommand{\thesisChapterStar}[1]{%
   \clearpage
   \phantomsection
@@ -100,12 +98,13 @@
   \vspace{\baselineskip}%
 }
 
-% --- Содержание ------------------------------------------------------------
-% Стиль вдохновлён vcourse-document-template:
-% секция — полужирные название и номер страницы, подсекция — полужирный
-% номер, обычные название и страница; единые точечные «лидеры» на всех
-% уровнях. Заголовок «Содержание» — по требованиям ВКР: с прописной буквы,
-% по левому краю с абзацным отступом, полужирный, без точки в конце.
+% --- Table of contents -----------------------------------------------------
+% Look inspired by vcourse-document-template:
+%   - section: bold name + bold page number;
+%   - subsection: bold number, regular name and page;
+%   - uniform dot leaders on every level.
+% The "Содержание" heading itself follows ВКР formatting rules: capitalized first letter,
+% left-aligned with paragraph indent, bold, no trailing period.
 \usepackage{tocloft}
 
 \renewcommand{\cftsecfont}{\bfseries}
@@ -124,8 +123,8 @@
 
 \renewcommand{\contentsname}{Содержание}
 
-% Печатаем заголовок «Содержание» сами, в стиле \thesisChapterStar,
-% а затем зовём \@starttoc, чтобы tocloft не выводил собственный заголовок.
+% Print the heading ourselves (in \thesisChapterStar style) and call
+% \@starttoc directly so tocloft does not emit its own title.
 \makeatletter
 \newcommand{\makethesistoc}{%
   \clearpage
@@ -137,10 +136,10 @@
 }
 \makeatother
 
-% --- Гиперссылки (последним) ----------------------------------------------
+% --- Hyperlinks (must be loaded last) --------------------------------------
 \usepackage[hidelinks, unicode]{hyperref}
 
-% --- API метаданных (значения подставляются в meta.tex) -------------------
+% --- Metadata API (values are assigned in meta.tex) ------------------------
 \newcommand{\thesisMinistry}[1]{\gdef\thethesisMinistry{#1}}
 \newcommand{\thesisInstitutionLong}[1]{\gdef\thethesisInstitutionLong{#1}}
 \newcommand{\thesisUniversity}[1]{\gdef\thethesisUniversity{#1}}

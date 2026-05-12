@@ -1,5 +1,5 @@
-% Титульный лист ВКР по образцу ОмГУ им. Ф.М. Достоевского.
-% Все данные берутся из meta.tex.
+% Title page following the OmSU (Dostoevsky Omsk State University) template.
+% All values are sourced from meta.tex.
 
 \RequirePackage{etoolbox}
 \newcommand{\thesisProgramLine}{%
@@ -30,7 +30,7 @@
 
     \vspace{12mm}
 
-    % Блок «УТВЕРЖДАЮ» — справа
+    % "Approved by" block — right-aligned
     \begin{flushright}
       \begin{minipage}{0.55\textwidth}
         \raggedright
@@ -43,7 +43,7 @@
 
     \vspace{20mm}
 
-    % Название работы
+    % Thesis title
     \begin{center}
       {\fontsize{16pt}{20pt}\selectfont\bfseries \thethesisTitle\par}
 
@@ -55,7 +55,7 @@
 
     \vspace{18mm}
 
-    % Научный руководитель
+    % Academic advisor
     \begin{flushright}
       \begin{minipage}{0.55\textwidth}
         \raggedright
@@ -68,7 +68,7 @@
 
     \vspace{10mm}
 
-    % Студент
+    % Student
     \begin{flushright}
       \begin{minipage}{0.55\textwidth}
         \raggedright
@@ -87,6 +87,6 @@
     \end{center}
     \end{singlespace}%
   \end{titlepage}%
-  % Титульный лист — первая страница, но номер на нём не печатается.
+  % Title page counts as page 1 but its number is not printed.
   \setcounter{page}{2}%
 }
