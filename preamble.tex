@@ -136,6 +136,30 @@
 }
 \makeatother
 
+% --- Appendices ------------------------------------------------------------
+% Russian-letter appendices per requirements.md: letters А, Б, В, Г, Д, Е, Ж,
+% И, К, Л, М, Н, П, Р, С, Т, У, Ф, Х, Ц, Ш, Щ, Э, Ю, Я (Ё, З, Й, О, Ч, Ь, Ы, Ъ
+% are skipped). Letters are passed explicitly to avoid auto-numbering mistakes.
+%
+% Usage in a section file:
+%   \thesisAppendix{А}{Скриншоты iOS-приложения}
+% Renders as a new-page, left-aligned, bold heading
+% «Приложение А. Скриншоты iOS-приложения» and adds an entry to the ToC.
+\newcommand{\thesisAppendix}[2]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{section}{Приложение #1. #2}%
+  \noindent\hspace*{\parindent}%
+    \textbf{\fontsize{16pt}{19pt}\selectfont Приложение #1. #2}\par
+  \vspace{\baselineskip}%
+}
+
+% --- Bibliography choice ---------------------------------------------------
+% Manual numbered list in sections/bibliography.tex (per ГОСТ 7.0.5-2008).
+% Rationale: keeps the build hermetic and avoids a biblatex-gost dependency
+% during scaffolding. If automated bibliography handling is later needed,
+% switch to biblatex with style=gost-numeric and a bib/sources.bib database.
+
 % --- Hyperlinks (must be loaded last) --------------------------------------
 \usepackage[hidelinks, unicode]{hyperref}
 
