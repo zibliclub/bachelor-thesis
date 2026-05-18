@@ -1,5 +1,7 @@
 # Инфраструктура и CI/CD клиентов
 
+> Backend-инфраструктура — преимущественно скоуп ВКР Максима. Здесь даётся **краткая сводка** для глав 2 и 3 (см. также [backend-contract.md](backend-contract.md)).
+
 ## iOS
 
 - Сборка релизов: Xcode Archive → загрузка в App Store Connect вручную.
@@ -7,13 +9,40 @@
 
 ## Android
 
-- Публикация в Google Play и RuStore.
-- (Конкретный pipeline — Gradle Play Publisher, fastlane, GitHub Actions — уточнить при ревью репо.)
+- Сборка: локально через Android Studio → Build → Generate Signed App Bundle (`.aab`).
+- Загружаемый артефакт — **AAB** (Android App Bundle), не APK; Google Play сам нарезает оптимизированные APK под устройства.
+- **Google Play:** через App Signing by Google Play (Play хранит app signing key, разработчик подписывает только upload-AAB).
+- **RuStore:** отдельный workflow подписи.
+- **CI/CD не настроен** — все сборки локальные. Подаётся в ВКР как ограничение MVP (переход на CI — задача дальнейшего развития).
+- См. подробности в [clients/android.md](clients/android.md), раздел 12.
 
 ## Web
 
-- Push в ветку → подключение к серверу по SSH → запуск Docker-сборки → пользователи получают обновлённую версию.
-- Это упрощённая схема. В планах — переход на более зрелый pipeline (CI/CD без ручного SSH).
+- Сборка: `next build` с `output: "standalone"` (Next.js собирает минимальный `server.js` + только необходимые `node_modules`).
+- Контейнеризация: многослойный `Dockerfile` (базовый образ `node:22-alpine`, three-stage: deps → builder → runner, non-root user).
+- Деплой: push в ветку → SSH-подключение к собственному VPS → пересборка контейнера → перезапуск. **GitHub Actions / другая CI не настроена** (директория `.github/` отсутствует).
+- Pre-commit hook через Husky (линт перед коммитом).
+- В планах — переход на более зрелый pipeline (GitHub Actions + автоматический деплой).
+
+## Backend (сводка)
+
+### Парсинговый контур (`api.vcourse.app`)
+
+- Авторство — Максим, **вне его ВКР**. Детали инфраструктуры в нашей работе не раскрываются.
+- В клиентах используется как REST + JSON через единый Bearer-UUID; описание контракта — [backend-contract.md, раздел 1](backend-contract.md#1-парсинговый-контур-apivcourseapp).
+
+### Платформенный контур (`platform.vcourse.app`) — ВКР Максима
+
+- **Стек:** Java 25, Spring Boot 3.5, Maven, PostgreSQL, Redis, RabbitMQ.
+- **Контейнеризация:** Docker per-микросервис.
+- **Оркестрация (prod):** Kubernetes (высокодоступный кластер).
+- **Dev-окружение:** Docker Compose + Nginx как reverse-proxy.
+- **CI/CD:** GitHub Actions. Пайплайн: сборка артефактов → Docker-образ → публикация в GHCR.
+- **Миграции БД:** Liquibase, исполняются микросервисами при старте.
+- **Наблюдаемость:** Spring Boot Actuator → Prometheus → Grafana.
+- **Тестирование:** на момент написания ВКР отсутствует, планируется.
+
+В нашей работе платформенный контур описывается **только как контекст** для главы 3.3.2 (web-admin) и для раздела 2.1.2 ВКР (контракт со смежной ВКР).
 
 ## Аналитика
 

@@ -12,11 +12,12 @@
 
 | Компонент | Платформа | Стек | Статус |
 |-----------|-----------|------|--------|
-| Мобильное приложение | iOS 18−/26+ | SwiftUI, Liquid Glass на iOS 26+ | Опубликовано в App Store |
-| Мобильное приложение | Android | Jetpack Compose, Material Design 3 Expressive | Опубликовано в Google Play и RuStore |
-| Лендинг + Web-просмотр расписания | Web | Next.js, Tailwind CSS, shadcn/ui | Опубликовано |
-| Web-сервис администрирования | Web (на том же домене, за авторизацией) | Next.js, Tailwind CSS, shadcn/ui | В активной разработке к моменту защиты |
-| Backend | Сервер | Java, Spring (соавтор — Максим) | В разработке, см. [backend-contract.md](backend-contract.md) |
+| Мобильное приложение | iOS 17.6+ | SwiftUI + SwiftData + WidgetKit (адаптация под Liquid Glass на iOS 26+) | Опубликовано в App Store |
+| Мобильное приложение | Android (minSdk 29) | Kotlin + Jetpack Compose + Material Design 3 Expressive + Room | Опубликовано в Google Play и RuStore |
+| Лендинг + Web-просмотр расписания | Web | Next.js 16 + React 19 + Tailwind v4 + shadcn/ui | Опубликовано |
+| Web-сервис администрирования | Web (на том же домене, за авторизацией) | Next.js 16 + React 19 + Tailwind v4 + shadcn/ui + TanStack Table | В активной разработке к моменту защиты |
+| Backend / парсинговый контур | `api.vcourse.app` | Java + Spring, авторство — Максим (вне его ВКР) | В продакшене |
+| Backend / платформенный контур | `platform.vcourse.app` | Java 25 + Spring Boot 3.5 + PostgreSQL + Redis + RabbitMQ + Kubernetes, авторство — Максим (его ВКР) | MVP к моменту защиты |
 
 ## Ключевое отличие от существующих решений
 
