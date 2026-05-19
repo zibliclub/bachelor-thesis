@@ -1,12 +1,289 @@
 \thesisAppendix{Г}{Фрагменты ключевого кода}
 
-% TODO: подобрать показательные фрагменты, не уместившиеся в основном тексте.
-% Рекомендации:
-%   - iOS: реализация условной маршрутизации Liquid Glass / классические компоненты.
-%   - iOS: реализация виджета.
-%   - Android: реализация динамической темизации с пользовательскими акцентами.
-%   - Web (админка): валидация коллизий при составлении расписания в UI-слое.
-%
-% Листинги оформлять через окружение verbatim или (предпочтительно при дальнейшем
-% подключении пакета listings) — \begin{lstlisting}[language=Swift,caption=...] ...
-% \end{lstlisting}.
+В настоящем приложении приведены шесть фрагментов исходного кода клиентских приложений системы <<ВКурсе>> --- по два на каждую платформу (iOS, Android и веб-составляющая). Фрагменты подобраны в соответствии с архитектурными решениями, рассмотренными в главе~3, и иллюстрируют те места кодовой базы, где сосредоточена нетривиальная инженерная логика, не уместившаяся в основной текст работы. Для каждого листинга в предшествующем абзаце указан путь к файлу в репозитории, диапазон строк и ссылка на соответствующий пункт главы~3.
+
+Двойная визуальная адаптация iOS-приложения под iOS~26+ Liquid Glass, обоснованная в п.~\ref{subsubsec:impl-ios-liquid-glass}, реализована через систему парных ресурсов \texttt{AccentColor}: для каждой из двенадцати акцентных палитр в каталоге ассетов заведены парные \texttt{colorset}-ы (\texttt{AccentBlue} для iOS~26+ и \texttt{AccentBlueLegacy} для iOS~17.6--18 и т.\,д.). Выбор между ними сосредоточен в одном вычисляемом свойстве \texttt{assetName}, ветви которого срабатывают через \texttt{\#available(iOS 26.0, *)}; одно и то же имя ресурса переиспользуется и в SwiftUI-ветке (\texttt{color}), и в UIKit-ветке (\texttt{uiColor}), что исключает рассинхронизацию темы между двумя ветками рендеринга и масштабируется на двенадцать акцентов без дублирования кода. Файл \texttt{Shared/Core/Common/Design/AccentColor.swift}, строки 10--58 (листинг~\ref{lst:ios-accent-color}).
+
+\begin{lstlisting}[caption={Парные colorset'ы \texttt{AccentColor} для двойной адаптации под iOS~26+ Liquid Glass},label=lst:ios-accent-color]
+enum AccentColor: String, CaseIterable, Identifiable {
+    case blue = "Blue"
+    case cyan = "Cyan"
+    case green = "Green"
+    case pink = "Pink"
+    case orange = "Orange"
+    case mint = "Mint"
+    case indigo = "Indigo"
+    case red = "Red"
+    case yellow = "Yellow"
+    case purple = "Purple"
+    case chartreuse = "Chartreuse"
+    case loving = "Loving"
+
+    // ... unrelated: applySystemTint(for:) for UIKit mirroring ...
+
+    var id: String { rawValue }
+
+    var assetName: String {
+        if #available(iOS 26.0, *) {
+            "Accent\(rawValue)"
+        } else {
+            "Accent\(rawValue)Legacy"
+        }
+    }
+
+    var uiColor: UIColor? { UIColor(named: assetName) }
+    var color: Color { Color(assetName) }
+}
+\end{lstlisting}
+
+Дедупликация расписания при смене подписок, описанная в п.~\ref{subsubsec:impl-ios-data}, реализована методом \texttt{deleteLessons(in:for:)} репозитория \texttt{LessonRepository}. Реализация учитывает, что один и тот же \texttt{LessonDTODataModel} может одновременно <<принадлежать>> нескольким сущностям --- учебной группе, преподавателю и аудитории, --- и поэтому прямое удаление по предикату ключа уничтожило бы записи, ещё нужные другим активным подпискам. Алгоритм сначала собирает множество оставшихся активных ключей из \texttt{ScheduleMetadataModel} (исключая ключ удаляемой подписки) и удаляет занятие только в том случае, если оно не совпадает ни с одним из них. Файл \texttt{Shared/Core/Data/Repositories/LessonRepository.swift}, строки 122--153 (листинг~\ref{lst:ios-lesson-repo-dedup}).
+
+\begin{lstlisting}[caption={Дедупликация уроков при удалении подписки в \texttt{LessonRepository}},label=lst:ios-lesson-repo-dedup]
+private func deleteLessons(
+    in context: ModelContext,
+    for keyToDelete: LessonEntityKey
+) {
+    let allMetadata =
+        (try? context.fetch(FetchDescriptor<ScheduleMetadataModel>())) ?? []
+    let activeKeys =
+        allMetadata
+        .filter {
+            $0.entityTypeRaw != keyToDelete.type.rawValue
+                || $0.entityID != keyToDelete.entityID
+        }
+        .map {
+            LessonEntityKey(
+                type: ScheduleType(rawValue: $0.entityTypeRaw)!,
+                entityID: $0.entityID
+            )
+        }
+
+    let predicate = makePredicate(for: keyToDelete)
+    let descriptor = FetchDescriptor<LessonDTODataModel>(
+        predicate: predicate
+    )
+    let lessons = (try? context.fetch(descriptor)) ?? []
+
+    for lesson in lessons {
+        let isUsedElsewhere = activeKeys.contains {
+            lesson.matches(key: $0)
+        }
+        if !isUsedElsewhere { context.delete(lesson) }
+    }
+}
+\end{lstlisting}
+
+Типобезопасная декларативная навигация Android-приложения, описанная в п.~\ref{subsubsec:impl-android-app-model}, задана единым файлом \texttt{Screens.kt}: иерархия \texttt{object} и \texttt{data class}, аннотированных \texttt{@Serializable} из библиотеки \texttt{kotlinx.serialization}, перечисляет все точки назначения \texttt{NavController}. Параметры маршрута передаются как поля типа, а не как строковые ключи вида \texttt{"schedule/\{id\}?type=\{type\}"}: компилятор гарантирует тип и состав аргументов, а сериализация при переходе по маршруту выполняется автоматически. Файл \texttt{app/\allowbreak src/\allowbreak main/\allowbreak java/\allowbreak app/\allowbreak vcourse/\allowbreak vcourse/\allowbreak core/\allowbreak navigation/\allowbreak Screens.kt}, строки 12--108 (листинг~\ref{lst:android-screens}).
+
+\begin{lstlisting}[caption={Типизированная декларативная навигация Compose через \texttt{@Serializable}},label=lst:android-screens]
+package app.vcourse.vcourse.core.navigation
+
+import app.vcourse.vcourse.core.common.enums.FavoritesCategory
+import app.vcourse.vcourse.core.common.enums.ScheduleType
+import kotlinx.serialization.Serializable
+
+// MARK: ONBOARDING
+
+@Serializable
+object ScreenWelcomeOnboarding
+
+@Serializable
+object ScreenUniversitySelectionOnboarding
+
+@Serializable
+object ScreenRoleSelectionOnboarding
+
+// MARK: HOME
+
+@Serializable
+object ScreenHome
+
+// ... unrelated ...
+
+@Serializable
+data class ScreenClassroomList(val buildingJson: String?, val addToRecent: Boolean = false)
+
+// MARK: LESSON
+
+@Serializable
+data class ScreenLesson(val routeLessonJson: String, val type: ScheduleType)
+
+@Serializable
+data class ScreenNote(val routeNoteJson: String)
+
+// ... unrelated ...
+
+// MARK: SCHEDULE
+
+@Serializable
+data class ScreenSchedule(val id: Int, val type: ScheduleType, val addToRecent: Boolean = false)
+
+// MARK: DATA CLASSES
+
+@Serializable
+data class RouteBuilding(val id: String, val name: String)
+
+@Serializable
+data class RouteLesson(
+    val slot: Int,
+    val dateHashCode: Int,
+    val entityId: Int,
+    val scheduleType: ScheduleType
+)
+
+@Serializable
+data class RouteNote(val id: String, val title: String, val text: String?)
+\end{lstlisting}
+
+Точка входа Android-приложения совмещает три архитектурных аспекта в единой композиционной функции \texttt{AppEntryPoint}: типизированную навигацию Compose (см. листинг~\ref{lst:android-screens}), реактивную смену темы и акцентного цвета (Material~3 Expressive, см.~п.~\ref{subsubsec:impl-android-ui}) и горячее переключение языка через \texttt{LanguageManager.createLocalizedContext(...)}, который вызывает системный \texttt{createConfigurationContext} и не требует перезапуска Activity (Android~10+). Activity дополнительно объявлена в манифесте с атрибутом \texttt{android:\allowbreak configChanges=\allowbreak "uiMode\allowbreak |orientation\allowbreak |screenSize\allowbreak |screenLayout\allowbreak |smallestScreenSize"}, что предотвращает её пересоздание при перечисленных изменениях конфигурации и сохраняет состояние графа навигации (\texttt{rememberNavController()}) и моделей (\texttt{rememberAppModel()}) без надстройки \texttt{ViewModel}. Файл \texttt{app/\allowbreak src/\allowbreak main/\allowbreak java/\allowbreak app/\allowbreak vcourse/\allowbreak vcourse/\allowbreak MainActivity.kt}, строки 68--94 (листинг~\ref{lst:android-app-entry}).
+
+\begin{lstlisting}[caption={Точка входа Android-приложения с реактивной темой и горячим переключением языка},label=lst:android-app-entry]
+@Composable
+private fun AppEntryPoint(state: InitialAppState) {
+    val initialThemeMode = state.themeMode ?: AppDefaults.THEME_MODE
+    val initialThemeColor = state.themeColor ?: AppDefaults.THEME_COLOR
+    val initialLanguage = state.language ?: AppDefaults.LANGUAGE
+
+    val currentThemeMode by ThemeModeManager.themeModeFlow.collectAsState(initialThemeMode)
+    val currentThemeColor by ThemeColorManager.themeColorFlow.collectAsState(initialThemeColor)
+    val currentLanguage by LanguageManager.languageFlow.collectAsState(initialLanguage)
+
+    val localizedContext = remember(currentLanguage) {
+        LanguageManager.createLocalizedContext(ContextHolder.appContext, currentLanguage)
+    }
+
+    val appModel = rememberAppModel()
+
+    CompositionLocalProvider(
+        LocalLocalizedContext provides localizedContext,
+        LocalAppModel provides appModel
+    ) {
+        AppTheme(currentThemeColor, currentThemeMode) {
+            Surface(color = MaterialTheme.colorScheme.surface) {
+                AppNavGraph(rememberNavController())
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+BFF-прокси веб-составляющей, обоснованный в п.~\ref{subsubsec:impl-web-bff}, реализован одним catch-all-обработчиком \texttt{[...path]/route.ts}. Обработчик инкапсулирует всю интеграцию с приватным backend-API <<ВКурсе>>: дозаписывает обязательные заголовки \texttt{Authorization: Bearer ...} (токен \texttt{VC\_AUTH\_TOKEN} живёт только в серверном рантайме и не утекает в браузер) и \texttt{X-API-Version}, переносит query-параметры клиента, опирается на встроенный Data Cache Next.js через \texttt{next:~\{~revalidate:~3600~\}}. Тривиальный по объёму, но архитектурно ключевой код: именно он превращает фронтенд в защищённый BFF и снимает с клиентских компонентов знание о схеме внешнего API. Файл \texttt{src/app/api/vcourse/[...path]/route.ts} (листинг~\ref{lst:web-bff-proxy}).
+
+\begin{lstlisting}[caption={BFF-прокси к серверной части с инъекцией заголовков аутентификации и версии API},label=lst:web-bff-proxy]
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  const { path } = await params;
+  const targetPath = path.join("/");
+
+  const url = new URL(`${process.env.VC_API_URL}/${targetPath}`);
+
+  request.nextUrl.searchParams.forEach((value, key) => {
+    url.searchParams.set(key, value);
+  });
+
+  if (targetPath === "universities") {
+    url.searchParams.set("available", "true");
+  }
+
+  const response = await fetch(url.toString(), {
+    next: { revalidate: 3600 },
+    headers: {
+      Authorization: `Bearer ${process.env.VC_AUTH_TOKEN}`,
+      "X-API-Version": process.env.VC_API_VERSION || "2",
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: "Failed to fetch" },
+      { status: response.status },
+    );
+  }
+
+  const data = await response.json();
+  return NextResponse.json(data);
+}
+\end{lstlisting}
+
+Стек \emph{undo}/\emph{redo} редактора расписания в сервисе администрирования, описанный в п.~\ref{subsubsec:impl-web-admin}, реализован хуком \texttt{useScheduleHistory}: ограниченная глубиной \texttt{HISTORY\_LIMIT~=~100} двойная очередь past/future хранится в \texttt{useRef}, а дискриминированное объединение \texttt{ScheduleHistoryEntryBody} с четырьмя видами действий (\texttt{atoms-append}, \texttt{atoms-remove}, \texttt{atoms-replace}, \texttt{entity-select}) обеспечивает exhaustive-проверку TypeScript в \texttt{switch}-разборе записи истории. Параметр \texttt{expectedId} в функции \texttt{undo} позволяет всплывающему уведомлению <<отменить>> откатывать строго ту запись, которой оно соответствует, даже если поверх неё уже были выполнены другие операции. Файлы \texttt{src/.../schedule/context/history-types.ts}, строки 6--16 (тип записи), и \texttt{src/.../schedule/context/use-schedule-history.ts}, строки 11--110 (хук); приведены совместно в листинге~\ref{lst:web-undo-redo}.
+
+\begin{lstlisting}[caption={Ограниченный стек undo/redo редактора расписания с дискриминированным объединением действий},label=lst:web-undo-redo]
+export type ScheduleHistoryEntryBody =
+  | { kind: "atoms-append"; atoms: LessonAtom[] }
+  | { kind: "atoms-remove"; atoms: LessonAtom[] }
+  | { kind: "atoms-replace"; before: LessonAtom[]; after: LessonAtom[] }
+  | {
+      kind: "entity-select";
+      before: SelectedEntity | null;
+      after: SelectedEntity | null;
+    };
+
+// ----- use-schedule-history.ts -----
+
+const HISTORY_LIMIT = 100;
+
+// ... unrelated (ScheduleHistoryApply / ScheduleHistoryState types) ...
+
+let historyCounter = 0;
+
+function pushBounded(
+  arr: ScheduleHistoryEntry[],
+  entry: ScheduleHistoryEntry,
+): ScheduleHistoryEntry[] {
+  const next = [...arr, entry];
+  return next.length > HISTORY_LIMIT
+    ? next.slice(next.length - HISTORY_LIMIT)
+    : next;
+}
+
+// ... unrelated (hook declaration, past/future refs, syncFlags) ...
+
+const recordHistory = useCallback(
+  (body: ScheduleHistoryEntryBody): number => {
+    const id = ++historyCounter;
+    const entry = { ...body, id } as ScheduleHistoryEntry;
+    pastRef.current = pushBounded(pastRef.current, entry);
+    futureRef.current = [];
+    syncFlags();
+    return id;
+  },
+  [syncFlags],
+);
+
+const undo = useCallback(
+  (expectedId?: number) => {
+    const past = pastRef.current;
+    if (past.length === 0) return;
+    const entry = past[past.length - 1];
+    if (expectedId !== undefined && entry.id !== expectedId) return;
+    switch (entry.kind) {
+      case "atoms-append":
+        applyAtomsRemove(entry.atoms.map((a) => a.id));
+        break;
+      case "atoms-remove":
+        applyAtomsAppend(entry.atoms);
+        break;
+      case "atoms-replace":
+        applyAtomsReplace(
+          entry.after.map((a) => a.id),
+          entry.before,
+        );
+        break;
+      case "entity-select":
+        applySelectEntity(entry.before);
+        break;
+    }
+    pastRef.current = past.slice(0, -1);
+    futureRef.current = pushBounded(futureRef.current, entry);
+    syncFlags();
+  },
+  // ... unrelated deps ...
+);
+
+// ... unrelated (symmetric redo) ...
+\end{lstlisting}
