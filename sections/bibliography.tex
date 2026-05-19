@@ -1,17 +1,93 @@
 % Список литературы.
 %
-% Ручная нумерованная разметка по ГОСТ 7.0.5-2008. Порядок: по алфавиту,
-% иностранные источники — в конце. На каждый источник должна быть ссылка в тексте.
-% Если потребуется автоматизация — перейти на biblatex с style=gost-numeric
-% и базой bib/sources.bib (см. комментарий в preamble.tex).
+% Оформление по ГОСТ 7.0.5-2008. Порядок: алфавитный; иностранные источники — в конце.
+% Используется штатный механизм LaTeX: thebibliography + \bibitem{key} + \cite{key}.
+% Нумерация и кликабельные ссылки на записи формируются автоматически благодаря
+% hyperref (см. preamble.tex). При изменении порядка или состава записей все
+% [N]-ссылки в тексте обновляются автоматически на следующей сборке.
+%
+% URL и даты обращения зафиксированы на 18.05.2026 — соответствуют состоянию работы
+% «на момент написания». При длительном перерыве перед защитой даты обращения и
+% версии могут потребовать актуализации.
 
 \thesisChapterStar{Список литературы}
 
-\begin{enumerate}
-  \item % TODO: внести источник по ГОСТ 7.0.5-2008. Пример книги:
-        % Аткинсон Л. MySQL. Библиотека профессионала. М.~: Издательский дом <<Вильямс>>, 2002. 624~с.
-  \item % TODO: пример статьи:
-        % Иванов И.~И., Петров П.~П. Название статьи // Название журнала. 2025. № 3. С.~12--34.
-  \item % TODO: пример интернет-источника:
-        % Apple Inc. Human Interface Guidelines. URL: \url{https://developer.apple.com/design/human-interface-guidelines} (дата обращения: 18.05.2026).
-\end{enumerate}
+\begin{thebibliography}{99}
+  \bibitem{1c-university} 1С:Университет ПРОФ : описание программного продукта : официальный сайт фирмы <<1С>>. URL: \url{https://solutions.1c.ru/catalog/university-prof} (дата обращения: 18.05.2026).
+
+  \bibitem{vcourse} ВКурсе : Расписание занятий : официальный сайт проекта. URL: \url{https://vcourse.app} (дата обращения: 18.05.2026).
+
+  \bibitem{galaktika-ruz} Галактика РУЗ : система управления учебным расписанием : официальный сайт корпорации <<Галактика>>. URL: \url{https://galaktika.ru/ruz} (дата обращения: 18.05.2026).
+
+  \bibitem{gost-7-0-5-2008} ГОСТ Р 7.0.5-2008. Система стандартов по информации, библиотечному и издательскому делу. Библиографическая ссылка. Общие требования и правила составления. М.~: Стандартинформ, 2008. 23~с.
+
+  \bibitem{gost-25010-2015} ГОСТ Р ИСО/МЭК 25010-2015. Информационные технологии. Системная и программная инженерия. Требования и оценка качества систем и программного обеспечения (SQuaRE). Модели качества систем и программных продуктов. М.~: Стандартинформ, 2015. 36~с.
+
+  \bibitem{dzhemerov-kotlin} Джемеров Д., Исакова С. Kotlin в действии. М.~: ДМК Пресс, 2018. 402~с.
+
+  \bibitem{campus-app} Кампус: расписание занятий : страница приложения в каталоге Google~Play. URL: \url{https://play.google.com/store/apps/details?id=ru.dewish.campus} (дата обращения: 18.05.2026).
+
+  \bibitem{martin-clean-arch} Мартин Р. Чистая архитектура : искусство разработки программного обеспечения. СПб.~: Питер, 2018. 352~с.
+
+  \bibitem{mmis-lab} ММИС Лаб : программные продукты для управления учебным процессом вуза : официальный сайт. URL: \url{http://www.mmis.ru} (дата обращения: 18.05.2026).
+
+  \bibitem{norman-design} Норман Д. А. Дизайн привычных вещей. М.~: Манн, Иванов и Фербер, 2018. 368~с.
+
+  \bibitem{omgau} Омский государственный аграрный университет имени П.~А.~Столыпина : официальный сайт. URL: \url{https://www.omgau.ru} (дата обращения: 18.05.2026).
+
+  \bibitem{raskin-interface} Раскин Дж. Интерфейс : новые направления в проектировании компьютерных систем. СПб.~: Символ-Плюс, 2010. 272~с.
+
+  \bibitem{studstartup-fasie} Студенческий стартап : описание грантовой программы Фонда содействия инновациям. URL: \url{https://fasie.ru/programs/programma-studstartup} (дата обращения: 18.05.2026).
+
+  \bibitem{tramplin} Технопарк <<ТРАМПЛИН>> : официальный сайт. URL: \url{https://tramplin.vc/} (дата обращения: 18.05.2026).
+
+  \bibitem{usov-swift} Усов В. Swift. Основы разработки приложений под iOS, iPadOS и macOS. СПб.~: Питер, 2022. 512~с.
+
+  \bibitem{fgos-01-03-02} Федеральный государственный образовательный стандарт высшего образования по направлению подготовки 01.03.02 <<Прикладная математика и информатика>> (уровень бакалавриата) : Министерство науки и высшего образования Российской Федерации. URL: \url{https://fgos.ru/fgos/fgos-01-03-02-prikladnaya-matematika-i-informatika-228} (дата обращения: 18.05.2026).
+
+  \bibitem{apple-hig} Apple Human Interface Guidelines : официальная документация Apple Developer. URL: \url{https://developer.apple.com/design/human-interface-guidelines} (дата обращения: 18.05.2026).
+
+  \bibitem{apple-swift-book} Apple Swift Programming Language Guide : официальная документация Apple. URL: \url{https://docs.swift.org/swift-book/documentation/the-swift-programming-language/} (дата обращения: 18.05.2026).
+
+  \bibitem{apple-swiftdata} Apple SwiftData Documentation : официальная документация Apple Developer. URL: \url{https://developer.apple.com/documentation/swiftdata} (дата обращения: 18.05.2026).
+
+  \bibitem{apple-swiftui} Apple SwiftUI Documentation : официальная документация Apple Developer. URL: \url{https://developer.apple.com/documentation/swiftui} (дата обращения: 18.05.2026).
+
+  \bibitem{apple-widgetkit} Apple WidgetKit Documentation : официальная документация Apple Developer. URL: \url{https://developer.apple.com/documentation/widgetkit} (дата обращения: 18.05.2026).
+
+  \bibitem{ecma-262} ECMA-262: ECMAScript 2022 Language Specification, 13th Edition : официальная спецификация Ecma International. Geneva, 2022. URL: \url{https://262.ecma-international.org/13.0} (дата обращения: 18.05.2026).
+
+  \bibitem{fielding-rest} Fielding R.~T. Architectural Styles and the Design of Network-based Software Architectures : Ph.~D. dissertation. Irvine~: University of California, 2000. 162~p.
+
+  \bibitem{rfc-9110} Fielding R., Nottingham M., Reschke J. HTTP Semantics : RFC 9110 / Internet Engineering Task Force. 2022. URL: \url{https://www.rfc-editor.org/rfc/rfc9110} (дата обращения: 18.05.2026).
+
+  \bibitem{fowler-eaa} Fowler M. Patterns of Enterprise Application Architecture. Boston~: Addison-Wesley, 2002. 533~p.
+
+  \bibitem{android-developers} Google Android Developers : официальная документация платформы. URL: \url{https://developer.android.com} (дата обращения: 18.05.2026).
+
+  \bibitem{jetpack-compose} Google Android Jetpack Compose Documentation : официальная документация декларативного UI-фреймворка. URL: \url{https://developer.android.com/jetpack/compose} (дата обращения: 18.05.2026).
+
+  \bibitem{android-room} Google Android Room Persistence Library : официальная документация. URL: \url{https://developer.android.com/training/data-storage/room} (дата обращения: 18.05.2026).
+
+  \bibitem{rfc-6749} Hardt D. The OAuth 2.0 Authorization Framework : RFC 6749 / Internet Engineering Task Force. 2012. URL: \url{https://www.rfc-editor.org/rfc/rfc6749} (дата обращения: 18.05.2026).
+
+  \bibitem{jetbrains-kotlin} JetBrains Kotlin Language Documentation : официальная документация языка Kotlin. URL: \url{https://kotlinlang.org/docs/home.html} (дата обращения: 18.05.2026).
+
+  \bibitem{rfc-7519} Jones M., Bradley J., Sakimura N. JSON Web Token (JWT) : RFC 7519 / Internet Engineering Task Force. 2015. URL: \url{https://www.rfc-editor.org/rfc/rfc7519} (дата обращения: 18.05.2026).
+
+  \bibitem{material-design-3} Material Design 3 Expressive : официальная документация дизайн-системы Google. URL: \url{https://m3.material.io} (дата обращения: 18.05.2026).
+
+  \bibitem{nextjs} Next.js Documentation : официальная документация фреймворка Vercel. URL: \url{https://nextjs.org/docs} (дата обращения: 18.05.2026).
+
+  \bibitem{radix-ui} Radix UI Primitives : официальная документация библиотеки UI-примитивов. URL: \url{https://www.radix-ui.com/primitives} (дата обращения: 18.05.2026).
+
+  \bibitem{react} React Documentation : официальная документация библиотеки. URL: \url{https://react.dev} (дата обращения: 18.05.2026).
+
+  \bibitem{shadcn-ui} shadcn/ui : официальная документация набора компонентов. URL: \url{https://ui.shadcn.com} (дата обращения: 18.05.2026).
+
+  \bibitem{tailwind-css} Tailwind CSS Documentation : официальная документация утилитарной CSS-системы. URL: \url{https://tailwindcss.com/docs} (дата обращения: 18.05.2026).
+
+  \bibitem{tanstack-table} TanStack Table : официальная документация headless-библиотеки таблиц. URL: \url{https://tanstack.com/table} (дата обращения: 18.05.2026).
+
+  \bibitem{typescript} TypeScript Documentation : официальная документация языка Microsoft. URL: \url{https://www.typescriptlang.org/docs} (дата обращения: 18.05.2026).
+\end{thebibliography}
