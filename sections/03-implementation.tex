@@ -6,102 +6,543 @@
 % Технические подразделы будут уточнены после ревью репозиториев клиентов.
 
 \clearpage
-\section{Реализация клиентских приложений}
+\section{РЕАЛИЗАЦИЯ КЛИЕНТСКИХ ПРИЛОЖЕНИЙ}
 
 \subsection{iOS-приложение}
+\label{subsec:impl-ios}
 
-\subsubsection{Технологический стек и архитектура}
-% TODO: уточнить после ревью репозитория iOS
-iOS-приложение реализовано на SwiftUI и собирается под целевую версию iOS~18.0 и выше. Архитектура построена вокруг декларативного описания интерфейса средствами SwiftUI; точные паттерны управления состоянием (использование framework Observation, выделение отдельного слоя моделей представления, организация навигации) уточняются по результатам ревью кодовой базы.
+В настоящем разделе изложена реализация iOS-приложения <<ВКурсе>>. Проектные обоснования принятых решений и их трассировка к требованиям первой главы приведены в главе~2 и здесь не дублируются; в фокусе раздела --- технологический стек, имена ключевых программных сущностей в кодовой базе, конфигурация сборки и фактические количественные показатели реализации.
 
-\subsubsection{Локальное хранение и кэширование}
-% TODO: уточнить после ревью репозитория iOS
-Расписание и связанные с ним справочные сущности кэшируются локально на устройстве после первой загрузки. Это обеспечивает работу приложения без активного подключения к сети и снижает нагрузку на сервер. При появлении сети данные обновляются в фоне. Конкретный механизм хранения (SwiftData, Core Data или сериализация в файлы) описывается далее по итогам ревью репозитория.
+\subsubsection{Технологический стек и состав проекта}
+\label{subsubsec:impl-ios-stack}
+
+iOS-приложение реализовано на языке Swift~5~\cite{usov-swift, apple-swift-book} и собирается под минимально поддерживаемую версию операционной системы iOS~17.6. В качестве пользовательского фреймворка использован SwiftUI~\cite{apple-swiftui}; реактивность достигается средствами фреймворка Observation (атрибут \texttt{@Observable}), пришедшего на смену комбинации \texttt{ObservableObject}\,+\,Combine. Локальное хранение реализовано средствами SwiftData~\cite{apple-swiftdata}; виджеты рабочего стола --- средствами WidgetKit~\cite{apple-widgetkit}; контекстные подсказки в интерфейсе --- средствами TipKit. Сетевой слой построен на штатных URLSession и Swift Concurrency; модель параллелизма --- структурированные задачи и группы задач (\texttt{Task}, \texttt{TaskGroup}).
+
+Внешние зависимости сведены к одному пакету Swift Package Manager --- \texttt{SwiftUI-Shimmer}, используемому для эффекта переливающейся заливки в местах загрузки данных. Все прочие подсистемы --- сетевой слой, хранилище, навигация, дизайн-токены --- реализованы собственными средствами без сторонних библиотек, что согласуется с принципом максимальной нативности (см.~п.~\ref{subsubsec:native-principle}).
+
+Проект организован в виде двух целей сборки: основного приложения \texttt{VCourse} и расширения виджетов \texttt{Widgets.appex}. Цели имеют идентификаторы \texttt{app.\allowbreak vcourse-llc.\allowbreak vcourse-bundle} и \texttt{app.\allowbreak vcourse-llc.\allowbreak vcourse-bundle.\allowbreak widgets-bundle} соответственно и объединены общей \emph{App Group} (см.~п.~\ref{subsubsec:impl-ios-data}). Объём кодовой базы на момент написания работы --- порядка 201~файла Swift и 18\,500 строк кода, не считая ресурсов и каталогов локализации. Структура каталогов основной цели сгруппирована по архитектурным слоям: \texttt{Shared/Core/AppModel}, \texttt{Shared/Core/Navigation}, \texttt{Shared/Core/Networking}, \texttt{Shared/Core/Data}, \texttt{Shared/Resources}, \texttt{Shared/Views}.
+
+\subsubsection{Композиционный корень и навигация}
+\label{subsubsec:impl-ios-app-model}
+
+Композиционный корень приложения, обоснованный в п.~\ref{subsubsec:composition-root}, реализован классом \texttt{AppModel} в файле \texttt{Shared/\allowbreak Core/\allowbreak AppModel/\allowbreak AppModel.swift}. Класс помечен атрибутами \texttt{@Observable} и \texttt{@MainActor}: первый обеспечивает автоматическое подписывание представлений на чтение его свойств, второй --- изоляцию обращений к корню к главному акторому потоку. Экземпляр \texttt{AppModel} создаётся однократно в инициализаторе \texttt{VCourseApp} и пробрасывается в иерархию представлений средствами модификатора \texttt{.environment(\_:)}; пересоздание корня в течение жизни процесса исключено.
+
+Состав корня соответствует таблице композиционного корня из п.~\ref{subsubsec:composition-root} и в кодовой базе представлен восемью наблюдаемыми моделями: \texttt{RoleModel}, \texttt{UniversityModel}, \texttt{StudentGroupModel}, \texttt{TutorModel}, \texttt{BuildingModel}, \texttt{ClassroomModel}, \texttt{LessonModel} и \texttt{RecentModel}. Каждая модель отвечает за свою предметную область, владеет ссылкой на репозиторий соответствующей сущности (см.~п.~\ref{subsubsec:impl-ios-data}) и публикует обозримое состояние слою представления. Расчёт текущей и ближайшей пары, требуемый ФТ-2, реализован методами \texttt{LessonModel} над локальным кэшем и системными часами устройства и не требует обращения к сети.
+
+Навигация построена на двух независимых наблюдаемых маршрутизаторах: \texttt{Router} управляет стеком экранов поверх системного \texttt{NavigationStack} и хранит путь как массив значений типа \texttt{Route}; \texttt{SheetRouter} управляет очередью модальных листов. \texttt{Route} --- единое перечисление с вложенными перечислениями для каждой ветви иерархии (\texttt{Onboarding}, \texttt{Settings}, \texttt{StudentGroup}, \texttt{Tutor}, \texttt{Building}, \texttt{Classroom}); это даёт типобезопасное декларативное описание всех точек назначения. На устройствах с iOS~18 и выше дополнительно используются увеличительные переходы между экранами через модификатор \texttt{.navigationTransition(.zoom(\dots))}; на более ранних версиях iOS переход остаётся стандартным. Главный экран и его контекстные элементы --- карточка идущей пары, карточка ближайшей пары в дни без занятий и переключение избранной группы из карточки расписания --- показаны на рис.~\ref{fig:ios-home}; экран является точкой входа в сценарий повседневного использования (см.~п.~\ref{subsubsec:student-scenario}).
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: главный экран в момент идущей пары --- карточка <<сейчас идёт пара~$N$>>}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: главный экран в день без занятий --- карточка ближайшей пары через несколько дней}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: длительное нажатие на карточку расписания --- контекстное меню переключения избранной группы}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Главный экран iOS-приложения: (а) карточка идущей пары; (б) карточка ближайшей пары через несколько дней; (в) контекстное меню выбора избранной группы из карточки расписания}
+  \label{fig:ios-home}
+\end{figure}
+
+\subsubsection{Слой данных и общий контейнер с виджетами}
+\label{subsubsec:impl-ios-data}
+
+Локальное хранение, обоснованное в п.~\ref{subsubsec:data-layer}, разделено между SwiftData и системным хранилищем пользовательских настроек. Конфигурация SwiftData-контейнера выполнена в файле \texttt{Shared/\allowbreak Core/\allowbreak Data/\allowbreak AppModelContainer.swift} и охватывает восемь моделей с атрибутом \texttt{@Model} --- по одной на учебное заведение (\texttt{University\allowbreak DataModel}), учебную группу (\texttt{StudentGroup\allowbreak DataModel}), преподавателя (\texttt{Tutor\allowbreak DataModel}), корпус (\texttt{Building\allowbreak DataModel}), аудиторию (\texttt{Classroom\allowbreak DataModel}), сырое расписание в виде DTO (\texttt{LessonDTO\allowbreak DataModel}), метаданные расписания (\texttt{Schedule\allowbreak MetadataModel}) и заметку пользователя (\texttt{LessonNote\allowbreak DataModel}). Контейнер размещён в файле \texttt{VCourse.store} внутри каталога общей App Group \texttt{group.\allowbreak app.\allowbreak vcourse-llc.\allowbreak vcourse-group}, что обеспечивает прямой доступ к одним и тем же данным как из основного приложения, так и из расширения виджетов рабочего стола без введения дополнительного слоя межпроцессного взаимодействия. При невосстановимой ошибке открытия стора реализован безопасный откат: контейнер удаляется и пересоздаётся, после чего инициируется повторная загрузка из сети.
+
+Доменные операции над хранилищем инкапсулированы в шести репозиториях --- \texttt{UniversityRepository}, \texttt{StudentGroupRepository}, \texttt{TutorRepository}, \texttt{BuildingRepository}, \texttt{ClassroomRepository} и \texttt{LessonRepository}. Каждый репозиторий принимает короткоживущий контекст SwiftData, выполняет операции выборки и записи и возвращает доменные модели, а не записи хранилища; преобразование сетевых DTO в \texttt{@Model}-сущности локализовано в отдельных мапперах (см.~п.~\ref{subsubsec:impl-ios-net}). Дедупликация расписания при смене подписок выполнена средствами \texttt{LessonRepository}: при отписке от сущности удаляются только те занятия, которые не принадлежат другой активной подписке (например, общие лекции потока, см. листинг~\ref{lst:ios-lesson-repo-dedup}).
+
+Пользовательские настройки и легковесные идентификаторы хранятся в системном хранилище \texttt{UserDefaults}, развёрнутом на той же App Group: синглтон \texttt{UserManager.shared} инициализирует \texttt{UserDefaults(suiteName: \dots)} и предоставляет приложению типизированный доступ к ключам, объявленным в перечислении \texttt{UserDefaultsKeys}. В этом хранилище находятся выбранная тема (\texttt{selectedTheme}), акцентный цвет (\texttt{accentColor}), идентификатор активной иконки (\texttt{appIcon}), UUID установки (\texttt{installationID}), идентификаторы выбранного учебного заведения, группы и преподавателя (\texttt{universityID}, \texttt{studentGroupID}, \texttt{tutorID}) и сериализованная сетка звонков. Размещение этих ключей в общей App Group обеспечивает виджетам и основному приложению идентичное представление пользовательских предпочтений.
+
+Глубокая упреждающая стратегия кэширования из п.~\ref{subsubsec:data-layer} реализована при первом запуске: после выбора учебного заведения и собственной сущности приложение запрашивает расписание в окне $\pm 1$~год и сохраняет полученные DTO в \texttt{LessonDTODataModel}, а метаданные --- в \texttt{ScheduleMetadataModel}. При последующих запусках главный экран отображается мгновенно из локального стора, а актуализация запускается параллельно через \texttt{Task}. Поденный просмотр расписания, меню быстрой навигации по сущностям занятия при длительном нажатии и карточка подробной информации о занятии показаны на рис.~\ref{fig:ios-schedule}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: поденный просмотр расписания в окне $\pm 1$~год}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: длительное нажатие на карточку занятия --- меню быстрой навигации к преподавателю, группам и аудитории}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: карточка подробной информации о занятии --- дисциплина, тип, участники, аудитория, заметки}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Экран расписания iOS-приложения: (а) поденный просмотр; (б) меню быстрой навигации по сущностям пары при длительном нажатии; (в) карточка подробной информации о занятии}
+  \label{fig:ios-schedule}
+\end{figure}
 
 \subsubsection{Сетевой слой}
-% TODO: уточнить после ревью репозитория iOS
-Сетевой слой построен на встроенных средствах URLSession в сочетании со Swift Concurrency (async/await). С каждым запросом передаётся уникальный идентификатор устройства, формируемый при первом запуске.
+\label{subsubsec:impl-ios-net}
 
-\subsubsection{Адаптация под Liquid Glass}
-% TODO: контент
-Одна из заметных особенностей реализации --- двойная визуальная адаптация. На устройствах с iOS~26 и выше задействуется визуальный язык Liquid Glass во всех уместных элементах интерфейса. На устройствах с iOS~18\textendash{}25 используются классические системные компоненты. Выбор визуальной ветви выполняется на этапе компоновки представления в зависимости от доступности соответствующих API.
+Реализация сетевого слоя, обоснованного в п.~\ref{subsubsec:network-layer}, размещена в каталоге \texttt{Shared/Core/Networking}. Базовая абстракция --- обобщённый тип \texttt{Endpoint<Response>}, объединяющий путь, набор параметров запроса, метод HTTP и тип декодируемого ответа. На месте вызова это даёт типизированную точку обращения: декодирование ответа выполняется автоматически в соответствии с параметром \texttt{Response}, конкретный тип DTO не дублируется в местах вызова.
 
-\subsubsection{Виджеты и системные интеграции}
-% TODO: контент
-В составе iOS-приложения реализован набор виджетов на рабочий стол: виджет с количеством пар на сегодня и виджеты со списком актуальных заметок в нескольких размерах. Касание виджета открывает соответствующий раздел приложения. Подробности по конфигурации виджетов и используемым WidgetKit-возможностям уточняются по итогам ревью репозитория.
+Выполнение запросов инкапсулировано в \texttt{NetworkClient} --- структуре, экспонируемой через синглтон \texttt{NetworkClient.shared} и обёртывающей системный \texttt{URLSession}. Основной метод --- асинхронная функция \texttt{fetch(\_:)}, принимающая \texttt{Endpoint<T>} и возвращающая декодированное значение типа \texttt{T} (либо выбрасывающая ошибку из перечисления \texttt{NetworkError}). \texttt{NetworkError} закрытое и перечисляет конкретные классы сбоев --- \texttt{invalidURL}, \texttt{invalidResponse}, \texttt{httpError}, \texttt{decodingFailed}; это позволяет вышестоящим слоям различать сетевые и контрактные проблемы и реагировать на них раздельно. Параллельная упреждающая загрузка справочников и расписания при первом запуске выполняется через \texttt{TaskGroup} в методе обновления выбранного учебного заведения, что обеспечивает использование сети с минимальной общей задержкой.
+
+Все четыре заголовка идентификации (см.~п.~\ref{subsubsec:read-contract}) формируются централизованно при построении \texttt{URLRequest} в \texttt{Endpoint}: общий клиентский ключ платформы в виде \texttt{Bearer <UUID>} подставляется в заголовок \texttt{Authorization}, версия контракта~--- в заголовок \texttt{X-API-Version} (текущее значение --- \texttt{2}), идентификатор установки берётся из \texttt{UserManager.\allowbreak shared.\allowbreak installationID} и помещается в \texttt{X-Installation-ID}, строка \texttt{User-Agent} собирается утилитой \texttt{UserAgentGenerator} из имени продукта, маркетинговой версии, номера сборки, имени и версии операционной системы и модели устройства. Точечной подстановки заголовков на стороне отдельных вызовов нет: любой запрос, проходящий через \texttt{NetworkClient}, гарантированно снабжается полным набором.
+
+Доменные эндпойнты сгруппированы по сущностям в виде типизированных пространств имён, статические члены которых возвращают сконфигурированные \texttt{Endpoint<\dots>}: \texttt{UniversityAPI}, \texttt{StudentGroupAPI}, \texttt{TutorAPI}, \texttt{BuildingAPI}, \texttt{ClassroomAPI} и \texttt{LessonAPI}. Базовый адрес парсингового контура серверной части (см.~п.~\ref{subsubsec:two-backends}) --- \texttt{https://api.vcourse.app/}~--- зафиксирован в одной точке исходного кода и в условной компиляции не разветвляется.
+
+\subsubsection{Темизация, акценты, иконки и локализация}
+\label{subsubsec:impl-ios-ui}
+
+Темизация интерфейса реализована перечислением \texttt{Theme: String} со значениями \texttt{system}, \texttt{light} и \texttt{dark}; выбор пользователя хранится в \texttt{UserDefaults} через свойство \texttt{@AppStorage("selectedTheme")} и применяется к корневой иерархии представлений модификатором \texttt{.preferredColorScheme(\_:)}. Переключение темы происходит без перезапуска приложения за счёт реактивности \texttt{@AppStorage}.
+
+Палитра акцентных цветов реализована типом \texttt{AccentColor} --- перечислением, наследующим протоколы \texttt{String} и \texttt{CaseIterable} и содержащим ровно двенадцать значений: \texttt{blue}, \texttt{cyan}, \texttt{green}, \texttt{pink}, \texttt{orange}, \texttt{mint}, \texttt{indigo}, \texttt{red}, \texttt{yellow}, \texttt{purple}, \texttt{chartreuse}, \texttt{loving}. Каждое значение ссылается на одноимённый ресурс цвета (\texttt{colorset}) в \texttt{Assets.xcassets}; о механизме выбора варианта ресурса для двух поколений операционной системы --- см.~п.~\ref{subsubsec:impl-ios-liquid-glass}. Иконка приложения реализована типом \texttt{AppIcon} и хранится в \texttt{UserDefaults}; пользователю доступны восемь вариантов: \texttt{AppIconDefault}, \texttt{AppIconAbstract}, \texttt{AppIconBlack}, \texttt{AppIconDev}, \texttt{AppIconGreen}, \texttt{AppIconIsometric}, \texttt{AppIconOrange}, \texttt{AppIconPinkie}. Переключение выполняется системным методом \texttt{UIApplication.\allowbreak shared.\allowbreak setAlternateIconName(\_:)}; для возврата к основной иконке передаётся \texttt{nil}. Альтернативные иконки описаны в каталогах \texttt{Shared/\allowbreak Resources/\allowbreak AppIcons/\allowbreak *.icon} с манифестами, на которые ссылается \texttt{Info.plist}.
+
+Локализация выполнена средствами String Catalogs (\texttt{.xcstrings}) --- современного формата строковых ресурсов Apple. Каталоги разделены по доменам приложения, что обеспечивает обозримость переводимых сущностей: помимо общего \texttt{Localizable.xcstrings}, заведены отдельные каталоги \texttt{Home}, \texttt{Theme}, \texttt{AppIcon}, \texttt{Widget} и др. (всего около пятнадцати каталогов). Поддерживаются два языка интерфейса --- русский и английский; выбор языка наследуется от системного либо явно переключается средствами приложения, как предусмотрено ФТ-6. Соответствие шрифтов Dynamic Type обеспечивается использованием системных стилей (\texttt{.body}, \texttt{.subheadline}, \texttt{.title2} и др.) без выписанных вручную размеров. Экраны настроек и оформления, объединяющие перечисленные средства, показаны на рис.~\ref{fig:ios-personalization}; иллюстрируются как нейтральный набор по умолчанию, так и контрастный пример персонализации (другой акцент, тёмная тема, альтернативная иконка).
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран настроек --- пункты <<Оформление>>, <<Избранное>>, <<Заметки>>, служебные разделы}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран оформления --- стандартный акцентный цвет, светлая тема, стандартная иконка приложения}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран оформления --- альтернативный акцентный цвет, тёмная тема, альтернативная иконка приложения}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Персонализация iOS-приложения: (а) экран настроек со списком разделов; (б) экран оформления со стандартным акцентом, светлой темой и стандартной иконкой; (в) экран оформления с альтернативным акцентом, тёмной темой и альтернативной иконкой}
+  \label{fig:ios-personalization}
+\end{figure}
+
+\subsubsection{Двойная визуальная адаптация под iOS~26 Liquid Glass}
+\label{subsubsec:impl-ios-liquid-glass}
+
+Двойная визуальная адаптация под две поколенческие версии операционной системы, обоснованная в п.~\ref{subsubsec:design-ios}, реализована централизованной проверкой доступности соответствующих программных интерфейсов конструкцией \texttt{if~\#available(iOS~26.0, *)}. Проверка локализована в общих модификаторах представлений (\texttt{Shared/\allowbreak Core/\allowbreak Common/\allowbreak Extensions/\allowbreak View+Extensions.swift}) и в составных компонентах интерфейса --- \texttt{RoundedIconView}, \texttt{LargeButton}, \texttt{ListRows} и аналогичных; на стороне продуктовых экранов ветвлений по версии операционной системы практически нет.
+
+Дифференциация затрагивает три класса визуальных параметров. Первый --- акцентная палитра: для каждого из двенадцати акцентов в каталоге ресурсов заведены парные \texttt{colorset}-ы, отличающиеся именем суффиксом (\texttt{AccentBlue} для iOS~26+ и \texttt{AccentBlueLegacy} для iOS~17.6\textendash{}18); тип \texttt{AccentColor} возвращает корректное имя ресурса в зависимости от ветви \texttt{\#available} (см. листинг~\ref{lst:ios-accent-color}). Второй --- геометрия скруглений: значения радиусов углов скоординированы с эффектом полупрозрачного <<стекла>> и принимают парные значения (например, $18$~пунктов для iOS~26+ и $12$~пунктов для iOS~17.6\textendash{}18). Третий --- стили списков и фоновые поверхности: на iOS~26+ применяется стиль \texttt{.plain} с фоном, согласованным с эффектом материала, на более ранних версиях используются классические системные фоны и плотности межстрочных расстояний. Кроме того, увеличительный переход \texttt{.navigationTransition(.zoom(\dots))} применяется только на iOS~18 и выше как ранее введённый системный модификатор. Сопоставление визуального облика приложения на двух поколениях операционной системы приведено на рис.~\ref{fig:ios-liquid-glass}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить заглушку сопоставлением двух скриншотов (iOS 17.6--18 vs iOS 26+).
+  \fbox{\parbox[c][8cm][c]{0.86\textwidth}{\centering\itshape Скриншоты: сравнение одного и того же экрана iOS-приложения на iOS 17.6--18 (классические компоненты, цвета AccentXxxLegacy) и iOS 26+ (Liquid Glass, цвета AccentXxx)}}
+  \caption{Визуальная адаптация iOS-приложения под iOS 17.6\textendash{}18 (слева) и iOS~26+ Liquid~Glass (справа)}
+  \label{fig:ios-liquid-glass}
+\end{figure}
+
+\subsubsection{Виджеты рабочего стола}
+\label{subsubsec:impl-ios-widgets}
+
+Виджеты рабочего стола реализованы как отдельная цель сборки \texttt{Widgets.appex}; точкой входа служит \texttt{WidgetsBundle}, регистрирующий два виджета. Первый --- \texttt{LessonsCountWidget} в семействе \texttt{systemSmall} --- отображает количество пар на текущий день. Второй --- \texttt{NotesWidget} в трёх семействах (\texttt{systemSmall}, \texttt{systemMedium} и \texttt{systemLarge}) --- отображает список ближайших активных заметок с разной плотностью представления. Каждый виджет описывается \texttt{StaticConfiguration} и собственным провайдером временной шкалы (\texttt{LessonsCountProvider}, \texttt{NotesProvider}), реализующим протокол \texttt{TimelineProvider}.
+
+Виджеты читают данные непосредственно из того же SwiftData-контейнера, что и основное приложение: общая App Group \texttt{group.\allowbreak app.\allowbreak vcourse-llc.\allowbreak vcourse-group} даёт обоим расширениям прямой доступ к \texttt{VCourse.store} без сетевого обращения, что является ключевым проектным решением, отделяющим виджет от состояния сети. Пользовательские заметки и расписание читаются из тех же \texttt{LessonDTODataModel} и \texttt{LessonNoteDataModel}, что используются в основной иерархии представлений; пересчёт временной шкалы виджета инициируется из основного приложения вызовом \texttt{WidgetCenter.\allowbreak shared.\allowbreak reloadAllTimelines()} после изменения заметки или окна расписания. Касание виджета на iOS использует системный механизм глубоких ссылок и переводит пользователя в соответствующий экран приложения (карточка ближайшей пары для \texttt{LessonsCountWidget}, список заметок для \texttt{NotesWidget}). Размещение виджетов ВКурсе в системной галерее виджетов iOS и их вид на рабочем столе показаны на рис.~\ref{fig:ios-widgets}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: системный лист добавления виджета на рабочем столе iOS --- виджеты ВКурсе в перечне}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: рабочий стол iOS с виджетом LessonsCount\-Widget --- количество пар на сегодня}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: рабочий стол iOS с виджетом NotesWidget --- список ближайших активных заметок}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Виджеты iOS-приложения: (а) системный лист добавления виджета с виджетами ВКурсе; (б) рабочий стол с виджетом количества пар; (в) рабочий стол с виджетом заметок}
+  \label{fig:ios-widgets}
+\end{figure}
+
+\subsubsection{Сборка и публикация}
+\label{subsubsec:impl-ios-release}
+
+Релизные сборки iOS-приложения собираются на рабочей станции разработчика в режиме \emph{Archive} среды Xcode и загружаются в \emph{App Store Connect}. Ранее на проекте использовалась облачная служба Xcode~Cloud для автоматизации сборок, однако в 2025~году её доступность на территории Российской Федерации была ограничена, и команда вернулась к ручному процессу подписи и выгрузки. Управление сертификатами и профилями провижининга выполняется в режиме \emph{managed signing} среды Xcode; иной автоматизации публикации (например, через fastlane или Gradle-аналоги) в проекте не введено.
+
+Версионирование на момент написания работы --- \texttt{MARKETING\_\allowbreak VERSION}~$=$~\texttt{0.2.3} у основной цели и \texttt{0.2.1} у расширения виджетов; единая конфигурация сборки используется как для разработки, так и для релиза --- разветвления на схемы \emph{Debug}/\emph{Staging}/\emph{Release} с различающимися адресами или ключами в проекте сознательно не введено. iOS-приложение опубликовано в \emph{App Store} в сентябре~2025~года; результаты эксплуатации, включая количество установок и распределение пользователей по платформам, обсуждаются в общем разделе апробации (см.~п.~\ref{subsec:impl-eval}).
+
+Полный обзор основных пользовательских экранов iOS-приложения --- онбординг, главный экран, списки справочных сущностей, экран расписания и карточка занятия, настройки, заметки и избранное, оформление и виджеты рабочего стола --- собран в приложении~А.
 
 \subsection{Android-приложение}
+\label{subsec:impl-android}
 
-\subsubsection{Технологический стек и архитектура}
-% TODO: уточнить после ревью репозитория Android
-Android-приложение реализовано на Jetpack Compose. Использован декларативный подход к построению интерфейса, единый с iOS-частью по структуре сценариев. Конкретные архитектурные паттерны (MVI, MVVM или Clean Architecture), система внедрения зависимостей и организация многомодульной сборки уточняются по результатам ревью репозитория.
+В настоящем разделе изложена реализация Android-приложения <<ВКурсе>>. Как и для iOS-приложения (см.~п.~\ref{subsec:impl-ios}), проектные обоснования принятых решений и их трассировка к требованиям первой главы приведены в главе~2 и здесь не дублируются; в фокусе раздела --- технологический стек, имена ключевых программных сущностей в кодовой базе, конфигурация сборки и фактические количественные показатели реализации. Архитектурно Android-приложение симметрично iOS-приложению по составу слоёв и доменных моделей (см.~п.~\ref{subsubsec:cross-platform-isomorphism}), что отражено в общей идиоматике подразделов ниже.
 
-\subsubsection{Локальное хранение}
-% TODO: уточнить после ревью репозитория Android
-Локальное хранение реализовано стандартными средствами Android. Конкретный выбор (Room, DataStore, SQLDelight) уточняется при ревью.
+\subsubsection{Технологический стек и состав проекта}
+\label{subsubsec:impl-android-stack}
+
+Android-приложение реализовано на языке Kotlin~2.2.21~\cite{dzhemerov-kotlin, jetbrains-kotlin} и собирается под минимально поддерживаемую версию операционной системы Android~10 (API~29)~\cite{android-developers} с целевым уровнем API~36 (Android~16). В качестве пользовательского фреймворка использован Jetpack Compose~\cite{jetpack-compose} (BOM~2025.10.01); используется актуальная редакция дизайн-системы --- \texttt{androidx.\allowbreak compose.\allowbreak material3} версии \texttt{1.5.0-\allowbreak alpha07}, реализующая Material Design~3 Expressive. Реактивность построена на сочетании корутин Kotlin и потоков состояния \texttt{StateFlow}; для типобезопасной (де)сериализации параметров маршрутов и других моделей используется \texttt{kotlinx.\allowbreak serialization}~1.9.0.
+
+Локальное хранение реализовано связкой \emph{Room}~2.8.4~\cite{android-room} (реляционное хранилище через \emph{KAPT}-процессор) и \emph{DataStore Preferences}~1.1.7 (реактивное ключ-значное хранилище), дополнительно используется стандартный \texttt{SharedPreferences} для долгоживущих идентификаторов пользователя. Навигация построена на Jetpack Navigation Compose~2.9.5 с типобезопасным описанием маршрутов; сетевой слой построен на штатной связке OkHttp~5.3.2 и Moshi~1.15.2 (см.~п.~\ref{subsubsec:impl-android-net}). Для системных интеграций задействованы \texttt{androidx.\allowbreak core:\allowbreak core-splashscreen}~1.0.1 (заставка), \texttt{androidx.\allowbreak activity:\allowbreak activity-compose}~1.11.0 (интеграция Compose с системным жизненным циклом активности) и Material Icons Extended (типобезопасное оборачивание системного набора иконок).
+
+Проект организован как одномодульная сборка Gradle с единственным целевым модулем \texttt{:app}; идентификатор приложения --- \texttt{app.vcourse.vcourse}. Версия на момент написания работы --- \texttt{0.1.5} (\texttt{versionCode}~$=$~\texttt{10}). Объём кодовой базы --- порядка 227 файлов Kotlin и 23\,500~строк кода, не считая ресурсов и каталогов локализации. Структура каталогов модуля сгруппирована по архитектурным слоям: \texttt{core/\allowbreak model} (состояние и доменные модели), \texttt{core/\allowbreak data} (Room, репозитории, конвертеры), \texttt{core/\allowbreak networking} (сетевой слой), \texttt{core/\allowbreak managers} (DataStore-обёртки темы, цвета, языка), \texttt{ui/\allowbreak theme} (палитра и Material-токены), \texttt{ui/\allowbreak screens} (Compose-экраны).
+
+\subsubsection{Композиционный корень и навигация}
+\label{subsubsec:impl-android-app-model}
+
+Композиционный корень, обоснованный в п.~\ref{subsubsec:composition-root}, реализован классом \texttt{AppModel}, помеченным аннотацией Compose \texttt{@Stable}; экземпляр создаётся однократно в обработчике \texttt{MainActivity.\allowbreak onCreate} и пробрасывается в иерархию представлений Compose через статическую локальную переменную композиции \texttt{LocalAppModel} (\texttt{staticCompositionLocalOf}). Любой Composable получает доступ к корню обращением \texttt{LocalAppModel.\allowbreak current}; передавать модели через параметры функций не требуется. Корень содержит ровно те же восемь доменных моделей, что и iOS-аналог: \texttt{RoleModel}, \texttt{UniversityModel}, \texttt{StudentGroupModel}, \texttt{TutorModel}, \texttt{BuildingModel}, \texttt{ClassroomModel}, \texttt{LessonModel} и \texttt{RecentModel}.
+
+Каждая модель устроена единообразно: внутреннее изменяемое состояние закрыто как \texttt{private val ... = MutableStateFlow(\dots)}, наружу выставлен неизменяемый \texttt{StateFlow<T>}; в Compose состояние читается оператором \texttt{collectAsState()} с автоматической подпиской на жизненный цикл. Длительные операции выполняются в собственной корутинной области моделей с \texttt{SupervisorJob()} и диспетчером \texttt{Dispatchers.\allowbreak IO}, что изолирует параллельные сетевые операции от главного потока пользовательского интерфейса. Расчёт текущей и ближайшей пары, требуемый ФТ-2, выполняется на стороне клиента средствами \texttt{LessonModel} над локальным кэшем и системным временем устройства и не требует обращения к сети.
+
+Навигация построена на Jetpack Navigation Compose. Все экраны приложения --- лестница объектов и data-классов в файле \texttt{Screens.kt}, помеченных аннотацией \texttt{@Serializable} библиотеки \texttt{kotlinx.\allowbreak serialization} (см. листинг~\ref{lst:android-screens}); это даёт типобезопасное описание точек назначения и автоматическую сериализацию параметров маршрутов без ручного формирования строковых ключей. \texttt{NavController} живёт в составе \texttt{AppModel} и не пересоздаётся при изменении конфигурации (поведение Activity при таких изменениях зафиксировано атрибутом \texttt{configChanges} в манифесте, см. листинг~\ref{lst:android-app-entry}). Главный экран в двух типовых состояниях --- во время идущей пары и в день без занятий --- и связанный с ним экран поиска сущностей показаны на рис.~\ref{fig:android-home}; главный экран является точкой входа в сценарий повседневного использования (см.~п.~\ref{subsubsec:student-scenario}).
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: главный экран в момент идущей пары --- карточка <<сейчас идёт пара~$N$>>}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: главный экран в день без занятий --- карточка ближайшей пары через несколько дней}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран поиска сущностей --- учебных групп, преподавателей и аудиторий --- с главного экрана}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Главный экран Android-приложения: (а) карточка идущей пары; (б) карточка ближайшей пары через несколько дней; (в) экран поиска учебных групп, преподавателей и аудиторий с главного экрана}
+  \label{fig:android-home}
+\end{figure}
+
+\subsubsection{Слой данных}
+\label{subsubsec:impl-android-data}
+
+Локальное хранение, обоснованное в п.~\ref{subsubsec:data-layer}, разделено между тремя подсистемами: реляционным хранилищем Room, реактивным DataStore Preferences и системным \texttt{SharedPreferences}. Конфигурация Room-базы задана классом \texttt{AppDatabase}, помеченным аннотацией \texttt{@Database} с восемью \texttt{@Entity}-сущностями --- по одной на учебное заведение (\texttt{University\allowbreak Entity}), учебную группу (\texttt{StudentGroup\allowbreak Entity}), преподавателя (\texttt{Tutor\allowbreak Entity}), корпус (\texttt{Building\allowbreak Entity}), аудиторию (\texttt{Classroom\allowbreak Entity}), сырое расписание в виде DTO (\texttt{LessonDto\allowbreak Entity}), метаданные расписания (\texttt{Schedule\allowbreak MetadataEntity}) и заметку пользователя (\texttt{LessonNote\allowbreak Entity}). Доступ к каждой таблице осуществляется через отдельный DAO-интерфейс в каталоге \texttt{core/\allowbreak data/\allowbreak daos}. Преобразование значений типа \texttt{java.\allowbreak util.\allowbreak Date} в долгое целое (\texttt{Long}) и обратно выполняется в \texttt{TypeConverters}. Версия схемы зафиксирована на единице; миграции пока не вводились, и в случае невосстановимой ошибки открытия базы реализован безопасный откат: база удаляется и пересоздаётся, после чего инициируется повторная упреждающая загрузка.
+
+Над DAO-слоем построены шесть репозиториев --- \texttt{University\allowbreak Repository}, \texttt{StudentGroup\allowbreak Repository}, \texttt{Tutor\allowbreak Repository}, \texttt{Building\allowbreak Repository}, \texttt{Classroom\allowbreak Repository} и \texttt{LessonRepository}. Каждый репозиторий принимает соответствующий DAO в качестве зависимости, выполняет операции выборки и записи и возвращает доменные модели, а не записи Room. Преобразование сетевых DTO в \texttt{@Entity}-сущности локализовано в отдельных мапперах (см.~п.~\ref{subsubsec:impl-android-net}). Дедупликация расписания при смене подписок выполнена средствами \texttt{LessonRepository}: метод удаления занятий не удаляет те, что принадлежат другой активной подписке (например, общие лекции потока).
+
+Реактивные пользовательские настройки --- выбор темы оформления (\texttt{ThemeMode}: \texttt{SYSTEM}/\texttt{LIGHT}/\texttt{DARK}), акцентный цвет, язык интерфейса --- хранятся в DataStore Preferences. Доступ к ним обёрнут менеджерами (\texttt{ThemeMode\allowbreak Manager}, \texttt{ThemeColor\allowbreak Manager}, \texttt{Language\allowbreak Manager}), отдающими наружу \texttt{Flow<\dots>}; при изменении значения автоматически перестраиваются заинтересованные участки иерархии Compose без перезапуска приложения. Долгоживущие идентификаторы --- роль пользователя, выбранные учебное заведение, группа и преподаватель, сериализованная сетка звонков (JSON), идентификаторы избранного и недавних поисков, а также UUID установки приложения --- хранятся в системном \texttt{SharedPreferences} с именем \texttt{user\_prefs}; обращение к этому хранилищу инкапсулировано в \texttt{UserManager}.
+
+Глубокая упреждающая стратегия кэширования из п.~\ref{subsubsec:data-layer} реализована аналогично iOS-клиенту: после выбора учебного заведения и собственной сущности приложение запрашивает расписание в окне $\pm 1$~год и сохраняет полученные DTO в \texttt{LessonDto\allowbreak Entity}, а метаданные --- в \texttt{Schedule\allowbreak MetadataEntity}; при последующих запусках главный экран и экран расписания отображаются мгновенно из локальной базы, а актуализация запускается параллельно. Поденный просмотр расписания, выбор произвольной даты через системный календарь и карточка подробной информации о занятии показаны на рис.~\ref{fig:android-schedule}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: поденный просмотр расписания в окне $\pm 1$~год}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: выбор произвольной даты через системный календарь --- быстрый переход к нужному дню расписания}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: карточка подробной информации о занятии --- дисциплина, тип, участники, аудитория, заметки}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Экран расписания Android-приложения: (а) поденный просмотр; (б) выбор произвольной даты через системный календарь; (в) карточка подробной информации о занятии}
+  \label{fig:android-schedule}
+\end{figure}
 
 \subsubsection{Сетевой слой}
-% TODO: уточнить после ревью репозитория Android
-Сетевой слой построен на корутинах Kotlin и Flow. Точная библиотека HTTP-клиента (Retrofit, Ktor) уточняется при ревью.
+\label{subsubsec:impl-android-net}
 
-\subsubsection{Material 3 Expressive и динамические темы}
-% TODO: контент
-Android-приложение использует Material Design~3 Expressive с поддержкой динамических тем. Реализованы 13 пользовательских акцентных цветов, существенно меняющих внешний вид приложения, и 8 вариантов иконки приложения; переключение иконки реализовано средствами activity-alias.
+Реализация сетевого слоя, обоснованного в п.~\ref{subsubsec:network-layer}, размещена в пакете \texttt{core/\allowbreak networking}. Базовая абстракция --- обобщённый тип \texttt{Endpoint<T>}, объединяющий путь, набор параметров запроса, метод HTTP и тип декодируемого ответа \texttt{T}. На месте вызова это даёт типизированную точку обращения: декодирование ответа выполняется автоматически в соответствии с параметром типа, конкретный тип DTO не дублируется в местах вызова.
+
+Выполнение запросов инкапсулировано в одноимённом синглтон-объекте \texttt{NetworkClient}; основной метод --- приостанавливаемая функция \texttt{fetch<T>(\allowbreak endpoint:\,\allowbreak Endpoint<T>):\,T}, выполняемая в контексте \texttt{Dispatchers.\allowbreak IO}. В качестве HTTP-клиента используется \texttt{OkHttpClient} из библиотеки OkHttp~5.3.2; декодирование тел ответа выполняется библиотекой Moshi~1.15.2 с поддержкой Kotlin-классов через рефлексионный адаптер \texttt{kotlin-\allowbreak reflect}. Таймауты установлены едино для подключения, чтения и записи --- 30~секунд. Параллельная упреждающая загрузка справочников и расписания при первом запуске выполняется средствами стандартных корутинных конструкций без специальных батч-функций.
+
+Типизированные ошибки сетевого слоя оформлены как закрытое наследование \texttt{sealed class NetworkError} с конкретными вариантами: \texttt{InvalidUrl}, \texttt{HttpError(code,\,body)}, \texttt{DecodingFailed}, \texttt{NoInternet} и \texttt{Unknown}; это позволяет вышестоящим слоям различать сетевые и контрактные проблемы и реагировать на них раздельно. Все четыре заголовка идентификации (см.~п.~\ref{subsubsec:read-contract}) формируются централизованно при построении \texttt{Request} в \texttt{Endpoint} --- общий клиентский ключ платформы в виде \texttt{Bearer <UUID>} подставляется в заголовок \texttt{Authorization}, версия контракта в заголовок \texttt{X-API-Version} (текущее значение --- \texttt{2}), идентификатор установки берётся из \texttt{UserManager} и помещается в \texttt{X-Installation-ID}, строка \texttt{User-Agent} собирается утилитой \texttt{UserAgentGenerator} из имени продукта (поля \texttt{BuildConfig}), номера сборки, имени и версии операционной системы (\texttt{Build.\allowbreak VERSION.\allowbreak RELEASE}) и модели устройства (\texttt{Build.\allowbreak MODEL}). Точечной подстановки заголовков на стороне отдельных вызовов нет: любой запрос, проходящий через \texttt{NetworkClient}, гарантированно снабжается полным набором.
+
+Доменные эндпойнты сгруппированы по сущностям в виде объектов \texttt{UniversityAPI}, \texttt{StudentGroupAPI}, \texttt{TutorAPI}, \texttt{BuildingAPI}, \texttt{ClassroomAPI} и \texttt{LessonAPI}; их статические члены возвращают сконфигурированные \texttt{Endpoint<\dots>}. Базовый адрес парсингового контура серверной части (см.~п.~\ref{subsubsec:two-backends}) --- \texttt{https://\allowbreak api.\allowbreak vcourse.\allowbreak app/} --- зафиксирован в одной точке исходного кода и в условной компиляции не разветвляется.
+
+\subsubsection{Темизация, акценты, иконки и локализация}
+\label{subsubsec:impl-android-ui}
+
+Темизация интерфейса реализована перечислением \texttt{ThemeMode} со значениями \texttt{SYSTEM}, \texttt{LIGHT} и \texttt{DARK}; выбор пользователя хранится в DataStore Preferences и наблюдается как \texttt{Flow<ThemeMode>}. На уровне корневого Composable выбранный режим применяется к Material-теме через стандартные средства Compose; смена темы происходит без перезапуска приложения за счёт реактивной природы DataStore. Дополнительно средствами \texttt{enableEdgeToEdge()} в \texttt{MainActivity} приложение выходит за пределы безопасных зон экрана и согласует цвет системных панелей с выбранной темой.
+
+Палитра акцентных цветов реализована перечислением \texttt{ThemeColor}, содержащим ровно девять значений: \texttt{BLUE}, \texttt{CYAN}, \texttt{GREEN}, \texttt{RED}, \texttt{ORANGE}, \texttt{MINT}, \texttt{PURPLE}, \texttt{YELLOW}, \texttt{LOVING}. Для каждой из девяти схем заведён отдельный объект-тема в каталоге \texttt{ui/\allowbreak theme/\allowbreak themes} (например, \texttt{BlueTheme}, \texttt{CyanTheme}, \texttt{LovingTheme}), реализующий общий интерфейс \texttt{AppTheme} с парой полей \texttt{lightScheme} и \texttt{darkScheme}; каждое поле содержит вручную выписанный набор Material-токенов (\texttt{primary}, \texttt{onPrimary}, \texttt{primaryContainer}, \texttt{secondary} и далее по полному набору). Выбор пользователя сохраняется в DataStore Preferences и распространяется на корневой Composable через \texttt{ThemeColor\allowbreak Manager} (\texttt{Flow<ThemeColor>}). Динамическая темизация Material You в текущей сборке сознательно не задействована (соответствующее решение зафиксировано в п.~\ref{subsubsec:design-android}); фиксированная палитра обеспечивает узнаваемый единый визуальный язык бренда на всех устройствах.
+
+Иконка приложения переключается между восемью вариантами: \texttt{LauncherBlue} (по умолчанию), \texttt{LauncherOrange}, \texttt{LauncherGreen}, \texttt{LauncherBlack}, \texttt{LauncherDev}, \texttt{LauncherIsometric}, \texttt{LauncherDoodle}, \texttt{LauncherAbstract}. На уровне системы это реализовано восемью элементами \texttt{<activity-alias>} в \texttt{AndroidManifest.xml}; каждый алиас является самостоятельной точкой входа лаунчера с собственным набором ресурсов \texttt{mipmap-*}. Переключение между алиасами выполняется системным вызовом \texttt{PackageManager.\allowbreak setComponentEnabledSetting}: текущий алиас переводится в состояние \texttt{COMPONENT\allowbreak \_ENABLED\allowbreak \_STATE\allowbreak \_DISABLED}, выбранный --- в \texttt{COMPONENT\allowbreak \_ENABLED\allowbreak \_STATE\allowbreak \_ENABLED}. Системное поведение Android при такой операции предусматривает кратковременное снятие приложения с лаунчера с последующим повторным размещением с новой иконкой.
+
+Локализация интерфейса реализована стандартными ресурсами Android: \texttt{res/\allowbreak values} содержит англоязычный набор строк, \texttt{res/\allowbreak values-ru} --- русский. Каталоги разделены по доменам приложения --- помимо общего \texttt{strings.\allowbreak xml} в каждом из каталогов локализации заведено около двадцати пяти отдельных файлов вида \texttt{strings\_\allowbreak <domain>.\allowbreak xml} (например, \texttt{strings\_\allowbreak lesson.\allowbreak xml}, \texttt{strings\_\allowbreak theme.\allowbreak xml}). Применение языка интерфейса осуществляется построением локализованного контекста через \texttt{createConfigurationContext} с заданной локалью; такой подход работает на всём поддерживаемом диапазоне Android~10 и выше и не требует перезапуска активности. Доступ к настройкам приложения реализован не как отдельный экран, а как навигационное выдвижное меню (\emph{navigation drawer}), выдвигаемое с левого края экрана. Это меню и экраны оформления, объединяющие перечисленные средства персонализации, показаны на рис.~\ref{fig:android-personalization}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить каждый \fbox на \includegraphics{...} с реальным скриншотом.
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: выдвижное навигационное меню (drawer) с пунктами настроек --- <<Оформление>>, <<Избранное>>, <<Заметки>> и служебными разделами; выдвигается с левого края экрана}}\\[3pt]
+    \small (а)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран оформления --- стандартный акцентный цвет, светлая тема, стандартная иконка приложения}}\\[3pt]
+    \small (б)
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.31\textwidth}
+    \centering
+    \fbox{\parbox[c][7cm][c]{0.9\linewidth}{\centering\itshape Скриншот: экран оформления --- альтернативный акцентный цвет, тёмная тема, альтернативная иконка приложения}}\\[3pt]
+    \small (в)
+  \end{minipage}
+  \caption{Персонализация Android-приложения: (а) выдвижное навигационное меню с пунктами настроек; (б) экран оформления со стандартным акцентом, светлой темой и стандартной иконкой; (в) экран оформления с альтернативным акцентом, тёмной темой и альтернативной иконкой}
+  \label{fig:android-personalization}
+\end{figure}
+
+\subsubsection{Сборка и публикация}
+\label{subsubsec:impl-android-release}
+
+Сборка Android-приложения выполняется средствами Gradle поверх Android Gradle Plugin~8.13.1 с целевым JDK~11; релизный артефакт --- Android App Bundle (\texttt{.aab}), создаваемый локально через интегрированную среду разработки Android~Studio (команда \emph{Build~$\to$~Generate Signed App Bundle}). Минификация и обфускация средствами R8 в текущей сборке отключены (\texttt{isMinifyEnabled = false}); правила \texttt{proguard-rules.pro} оставлены как заготовка под последующее включение. Настройка production-релизной подписи --- задача дальнейшего развития (см.~п.~3.5).
+
+Распространение Android-приложения ведётся по двум каналам: \emph{Google Play} (с использованием механизма App~Signing~by~Google~Play, когда финальная подпись пользовательской сборки выполняется на стороне магазина) и \emph{RuStore} (отдельный канал распространения с собственным процессом загрузки). На момент написания работы публикуемая версия --- \texttt{0.1.5} (\texttt{versionCode}~$=$~\texttt{10}); первоначальная публикация в обоих магазинах --- февраль~2026~года. Результаты эксплуатации, включая количество установок и распределение пользователей по платформам, обсуждаются в общем разделе апробации (см.~п.~\ref{subsec:impl-eval}).
+
+Полный обзор основных пользовательских экранов Android-приложения --- онбординг, главный экран, списки справочных сущностей, экран расписания и карточка занятия, настройки, заметки и избранное, оформление --- собран в приложении~Б.
 
 \subsection{Web-приложение}
+\label{subsec:impl-web}
 
-\subsubsection{Технологический стек}
-% TODO: уточнить после ревью репозитория Web
-Веб-часть реализована на Next.js поверх React, с использованием Tailwind CSS для оформления и компонентов shadcn/ui. Решение о выборе App Router либо Pages Router, а также используемые режимы рендеринга (SSR, SSG, ISR, RSC) уточняются по итогам ревью репозитория.
+В настоящем разделе изложена реализация веб-составляющей платформы <<ВКурсе>>. Как и для мобильных клиентов (см.~п.~\ref{subsec:impl-ios},~п.~\ref{subsec:impl-android}), проектные обоснования принятых решений и их трассировка к требованиям первой главы приведены в главе~2 и здесь не дублируются; в фокусе раздела --- технологический стек, имена ключевых файлов и компонентов в кодовой базе, конфигурация сборки и развёртывания. Веб-составляющая, в отличие от мобильных клиентов, охватывает сразу три функциональные роли --- лендинг, публичное приложение просмотра расписания и закрытый сервис администрирования; раздельная подача этих ролей соответствует разграничению, принятому в п.~\ref{subsubsec:client-components}.
 
-\subsubsection{Публичный лендинг}
-% TODO: контент
-Лендинг включает несколько страниц: главную, страницу <<О нас>>, блог, страницу политики конфиденциальности и связанные с ними страницы. Вёрстка адаптивна; одинаково корректно отображается на десктопе и на мобильных устройствах.
+\subsubsection{Технологический стек, моно-репо и общие средства}
+\label{subsubsec:impl-web-stack}
 
-\subsubsection{Веб-просмотр расписания}
-% TODO: контент
-Веб-приложение просмотра расписания доступно на том же домене, что и лендинг. Функционально оно является подмножеством мобильных приложений и не реализует часть фич (заметки к парам, виджеты, глубокая персонализация), при этом предоставляет современный, адаптивный и удобный интерфейс просмотра расписания, опережающий по UX большинство собственных веб-расписаний учебных заведений.
+Веб-составляющая реализована как единый Next.js-проект~\cite{nextjs} версии~16.1.6 на основе App Router; целевой исполняемой средой является Node.js~20+ (контейнерная сборка использует образ \texttt{node:22-alpine}). В качестве библиотеки представления используется React~19.2.3~\cite{react}; язык разработки --- TypeScript~5~\cite{typescript} в режиме \texttt{strict}. Стилизация выполнена средствами Tailwind CSS версии~4.1.18 (используется PostCSS-плагин \texttt{@tailwindcss/\allowbreak postcss}); набор пользовательских компонентов --- shadcn/ui (около 36 компонентов в каталоге \texttt{src/\allowbreak components/\allowbreak ui}, построенных поверх примитивов Radix UI и \texttt{@base-ui/\allowbreak react}). Иконки --- \texttt{lucide-react}; шрифты --- Geist и Geist~Mono, подключаемые через \texttt{next/\allowbreak font/\allowbreak google}.
+
+Все три функциональные роли веб-составляющей размещены в единой структуре каталогов App Router под локализационным сегментом \texttt{src/\allowbreak app/\allowbreak [locale]} и разделены тремя \emph{маршрутными группами} (\texttt{route groups}) Next.js: \texttt{(landing)} --- маркетинговый лендинг и блог, \texttt{(schedule)} --- публичное приложение просмотра расписания, \texttt{(service)} --- закрытый сервис администрирования. Маршрутные группы обеспечивают разные корневые макеты (\texttt{layout.\allowbreak tsx}) для каждой роли при сохранении общего сегмента локали в URL.
+
+Локализация выполнена средствами \texttt{next-intl}~4.7.0; поддерживаются два языка интерфейса --- русский и английский, сообщения организованы трёхуровневой иерархией (\texttt{messages/\allowbreak \{en,ru\}/\allowbreak \{common,components,pages\}/\allowbreak <namespace>.json}). На стороне серверных компонентов используется \texttt{getTranslations()}, на стороне клиентских --- хук \texttt{useTranslations()}. Темизация --- через \texttt{next-themes}~0.4.6 с тремя режимами: \texttt{light}, \texttt{dark} и \texttt{system}; тема применяется добавлением класса \texttt{.dark} к корневому элементу документа и распространяется на все три функциональные роли. В отличие от мобильных клиентов, веб-составляющая работает в единой фирменной палитре без дополнительных акцентных цветовых схем (соответствующее проектное решение зафиксировано в п.~\ref{subsubsec:design-web}).
+
+Прочие существенные библиотеки --- \texttt{@next/\allowbreak mdx} вместе с \texttt{gray-matter} (MDX-контент для блога, FAQ и политики конфиденциальности), \texttt{@tanstack/\allowbreak react-table} (таблицы справочников в сервисе администрирования), \texttt{recharts} (графики), \texttt{react-aria-components} (типобезопасные компоненты с поддержкой доступности), \texttt{date-fns}~4 (работа с датами), \texttt{sonner} (всплывающие уведомления). Объём кодовой базы --- около 470 файлов \texttt{.ts}/\texttt{.tsx} и 48\,800 строк кода. Текущая версия пакета --- \texttt{0.1.1}; рабочий домен --- \texttt{vcourse.app}.
+
+\subsubsection{BFF-прокси к серверной части}
+\label{subsubsec:impl-web-bff}
+
+Ключевая архитектурная особенность веб-составляющей --- собственный BFF-слой, проектное обоснование которого приведено в п.~\ref{subsubsec:bff}. На уровне реализации BFF выполнен двумя \emph{обработчиками маршрутов} Next.js (\emph{route handlers}): \texttt{src/\allowbreak app/\allowbreak api/\allowbreak vcourse/\allowbreak [...path]/\allowbreak route.\allowbreak ts} проксирует обращения к парсинговому контуру серверной части (см.~п.~\ref{subsubsec:two-backends}, листинг~\ref{lst:web-bff-proxy}), а \texttt{src/\allowbreak app/\allowbreak api/\allowbreak static/\allowbreak [...path]/\allowbreak route.\allowbreak ts} --- к серверу статики (логотипы учебных заведений и сопутствующие ресурсы).
+
+Базовый адрес целевой системы для каждого из проксируемых каналов берётся из переменных окружения сервера: \texttt{VC\_\allowbreak API\_\allowbreak URL} и \texttt{VC\_\allowbreak STATIC\_\allowbreak URL}. Заголовки идентификации (см.~п.~\ref{subsubsec:read-contract}) проставляются на стороне сервера: \texttt{Authorization} формируется как \texttt{Bearer~\$\{VC\_\allowbreak AUTH\_\allowbreak TOKEN\}}, версия контракта берётся из \texttt{VC\_\allowbreak API\_\allowbreak VERSION} (значение по умолчанию --- \texttt{2}). Принципиально, что переменная \texttt{VC\_\allowbreak AUTH\_\allowbreak TOKEN} существует только в окружении сервера и не передаётся в браузер пользователя; это исключает риск её утечки через инструменты разработчика. Соответствующее решение реализует требование НФТ-7.
+
+Стратегия кэширования настроена дифференцированно. Запросы к расписанию и справочникам выполняются с параметром \texttt{next:\,\{\,revalidate:\,3600\,\}}, что включает инкрементальную регенерацию страниц с интервалом обновления в один час; запросы к статическим ресурсам --- с \texttt{next:\,\{\,revalidate:\,86400\,\}} и дополнительной установкой заголовка \texttt{Cache-Control:\,immutable} в браузере. Дополнительно BFF выполняет нормализацию ответов перед отправкой клиенту (например, подстановку фильтра доступности при запросе списка учебных заведений).
+
+\subsubsection{Публичный лендинг и блог}
+\label{subsubsec:impl-web-landing}
+
+Лендинг и блог реализованы в маршрутной группе \texttt{(landing)} и включают страницы главной (\texttt{/}), <<О нас>> (\texttt{/about}), скачивания мобильных приложений (\texttt{/download}), часто задаваемых вопросов (\texttt{/faq}), блога (\texttt{/blog}, \texttt{/blog/[slug]}) и политики конфиденциальности (\texttt{/privacy}). Контент блога, FAQ и политики хранится в виде MDX-файлов в каталоге \texttt{src/content} с раздельными версиями для двух языков --- \texttt{src/\allowbreak content/\allowbreak \{blog,faq,privacy\}/\allowbreak \{en,ru\}.\allowbreak mdx}; преамбула каждого файла (frontmatter) разбирается утилитой \texttt{gray-matter}, а тело --- компилируется в React-компоненты средствами \texttt{@next/\allowbreak mdx}.
+
+Поисковая оптимизация выполнена в едином корневом макете локали \texttt{src/\allowbreak app/\allowbreak [locale]/\allowbreak layout.\allowbreak tsx}: функция \texttt{generateMetadata()} формирует пакет метаданных (\texttt{title}, \texttt{description}, Open~Graph, Twitter~Card) с учётом выбранного языка интерфейса. Страницы лендинга подвергаются статической оптимизации Next.js (\emph{static rendering}); содержимое блога обновляется по схеме инкрементальной регенерации при добавлении новых MDX-файлов. Общий вид главной страницы лендинга показан на рис.~\ref{fig:web-landing}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом главной страницы лендинга.
+  \fbox{\parbox[c][5.5cm][c]{0.85\textwidth}{\centering\itshape Скриншот: главная страница лендинга \texttt{vcourse.app} --- ключевое сообщение, демонстрация мобильных приложений, призывы к действию, нижняя навигация}}
+  \caption{Главная страница лендинга веб-составляющей}
+  \label{fig:web-landing}
+\end{figure}
+
+\subsubsection{Веб-приложение просмотра расписания}
+\label{subsubsec:impl-web-schedule}
+
+Публичное веб-приложение просмотра расписания размещено в маршрутной группе \texttt{(schedule)} и охватывает единственную страницу \texttt{(schedule)/\allowbreak schedule/\allowbreak page.\allowbreak tsx}. Основная иерархия представления вынесена в клиентский компонент \texttt{ScheduleContent} объёмом порядка шестисот строк, монтируемый в страницу через границу серверного и клиентского рендеринга Next.js (\texttt{<<use~client>>}).
+
+Состояние просмотрщика разделено между параметрами URL и локальным хранилищем браузера. В параметрах URL --- идентификатор учебного заведения (\texttt{universityId}), тип сущности (\texttt{type}: учебная группа, преподаватель или аудитория) и идентификатор сущности (\texttt{id}); чтение выполняется средствами \texttt{useSearchParams()}. Такая раскладка обеспечивает возможность поделиться ссылкой на расписание конкретной сущности с автоматическим восстановлением выбора при открытии. В локальном хранилище браузера сохраняется последнее выбранное учебное заведение и история поиска; обращение к этим данным инкапсулировано отдельными хуками.
+
+Загрузка данных выполняется через BFF-прокси (см.~п.~\ref{subsubsec:impl-web-bff}) средствами стандартной функции \texttt{fetch} с указанием стратегии ISR; набор эндпойнтов и форма ответов согласованы с мобильными клиентами по принципу единого фасада (п.~\ref{subsubsec:two-backends}).
+
+Адаптивность реализована средствами утилитарных классов Tailwind по принципу \emph{mobile-first} в соответствии с НФТ-3. На мобильной раскладке (ширина окна менее $640$~пикселов) боковая панель управления свёрнута и поднимается островным меню при необходимости; используется компонент \texttt{Sheet} из shadcn/ui --- модальная выдвижная панель. На промежуточной раскладке от $640$ до $1024$~пикселов панель частично свёрнута. На десктопной раскладке от $1024$~пикселов --- постоянная боковая панель, обеспечивающая прямой доступ к выбору точки зрения и переключению дней. Десктопная и мобильная раскладки веб-просмотра расписания показаны на рис.~\ref{fig:web-schedule-desktop} и~\ref{fig:web-schedule-mobile} соответственно.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом десктопной раскладки.
+  \fbox{\parbox[c][6cm][c]{0.85\textwidth}{\centering\itshape Скриншот: десктопная раскладка веб-приложения просмотра расписания --- постоянная боковая панель с выбором учебного заведения и точки зрения, центральная область с сеткой расписания}}
+  \caption{Веб-приложение просмотра расписания: десктопная раскладка}
+  \label{fig:web-schedule-desktop}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом мобильной раскладки.
+  \fbox{\parbox[c][8.5cm][c]{0.35\textwidth}{\centering\itshape Скриншот: мобильная раскладка веб-приложения просмотра расписания --- компактная сетка расписания, выдвижное меню Sheet с выбором сущности}}
+  \caption{Веб-приложение просмотра расписания: мобильная раскладка}
+  \label{fig:web-schedule-mobile}
+\end{figure}
 
 \subsubsection{Веб-сервис администрирования}
-% TODO: контент
-Веб-сервис администрирования размещён на том же домене, но доступен только после авторизации. Доступ имеют сотрудники учебного заведения. Поддерживаются две роли: администратор (управление сотрудниками и метаданными заведения) и сотрудник (методист или диспетчер, работающий с расписанием и справочниками). В составе сервиса --- управление справочниками групп, преподавателей, аудиторий, факультетов, кафедр и корпусов, а также интерфейс составления расписания с проверкой коллизий на стороне сервера.
+\label{subsubsec:impl-web-admin}
+
+Закрытый сервис администрирования размещён в маршрутной группе \texttt{(service)} и охватывает три ветви маршрутов. Ветвь \texttt{/authorization} обслуживает форму входа сотрудника учебного заведения. Ветвь \texttt{/onboarding} реализует многошаговый мастер первичной настройки учебного заведения, последовательность шагов которого проектно зафиксирована в п.~\ref{subsubsec:onboarding-scenario}. Ветвь \texttt{/workspace} содержит рабочий стол сотрудника со страницами \texttt{/workspace/\allowbreak dashboard} (сводный экран), \texttt{/workspace/\allowbreak schedule} (редактор расписания), \texttt{/workspace/\allowbreak employees} (управление сотрудниками) и шестью страницами справочников --- \texttt{/workspace/\allowbreak faculties}, \texttt{/workspace/\allowbreak departments}, \texttt{/workspace/\allowbreak buildings}, \texttt{/workspace/\allowbreak classrooms}, \texttt{/workspace/\allowbreak student-groups}, \texttt{/workspace/\allowbreak tutors}.
+
+Доменная модель сервиса администрирования шире модели публичных клиентов и содержит семнадцать типов, объявленных в каталоге \texttt{src/\allowbreak core/\allowbreak service/\allowbreak domain}; помимо общих для всех клиентов сущностей (учебное заведение, группа, преподаватель, аудитория, корпус, занятие), здесь объявлены факультеты, кафедры, направления подготовки, сотрудники, дисциплины, атомы уроков, записи журнала изменений и сопутствующие справочные структуры. Соответствие этого множества клиентской модели обсуждается в п.~\ref{subsubsec:domain-model}.
+
+Авторизация построена по схеме OAuth~2.0 в режиме Resource Owner Password Credentials (см.~п.~\ref{subsubsec:admin-contract}). После успешного входа сервис получает пару подписанных JSON Web Token'ов: короткоживущий access-токен и долгоживущий refresh-токен. Токены помещаются в защищённые HTTP-only cookies, а серверный промежуточный слой Next.js (middleware) перехватывает обращения к защищённым маршрутам, проверяет действующий access-токен и при необходимости инициирует обновление пары через refresh-эндпойнт. При отсутствии действующего токена пользователь автоматически перенаправляется на форму входа.
+
+Рабочий стол сотрудника реализован как трёхколоночный макет shadcn/ui: левая панель содержит навигацию по разделам, центральная --- рабочую область, правая --- контекстные действия. Общий вид рабочего стола в режиме сводного экрана показан на рис.~\ref{fig:web-admin-dashboard}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом дашборда.
+  \fbox{\parbox[c][6cm][c]{0.85\textwidth}{\centering\itshape Скриншот: дашборд сервиса администрирования --- левая боковая панель разделов, центральная область со сводными показателями и графиками, правая контекстная панель}}
+  \caption{Дашборд сервиса администрирования}
+  \label{fig:web-admin-dashboard}
+\end{figure}
+
+Управление справочниками реализовано через библиотеку \texttt{@tanstack/\allowbreak react-table}~\cite{tanstack-table}: для каждой сущности (учебных групп, преподавателей, аудиторий, корпусов, факультетов, кафедр, сотрудников) создана типизированная конфигурация таблицы с поддержкой фильтрации, сортировки и постраничной навигации. Запрос и обновление данных выполняются на стороне сервера средствами серверных компонентов и серверных действий (\emph{server actions}) Next.js; обновление состояния таблицы после мутации производится вызовами \texttt{revalidatePath} и \texttt{revalidateTag}. Общий вид экрана-справочника на примере списка учебных групп приведён на рис.~\ref{fig:web-admin-groups}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом экрана списка учебных групп.
+  \fbox{\parbox[c][6cm][c]{0.85\textwidth}{\centering\itshape Скриншот: экран списка учебных групп --- таблица TanStack Table с фильтрацией по факультету, форме обучения и году набора, действия редактирования и удаления}}
+  \caption{Экран списка учебных групп как пример экрана-справочника}
+  \label{fig:web-admin-groups}
+\end{figure}
+
+Редактор расписания, обоснованный в п.~\ref{subsubsec:methodist-scenario}, реализован в трёх связанных подсистемах. Первая --- атомарная модель урока: тип \texttt{LessonAtom} представляет неделимую запись о занятии и хранит ссылки на участников и пометку происхождения (одно из четырёх состояний: \texttt{snapshot}, \texttt{dirty}, \texttt{new}, \texttt{removed}); визуальный индикатор каждой карточки занятия в интерфейсе формируется по агрегату пометок входящих атомов. Вторая --- React-контекст \texttt{ScheduleProvider} над набором подсостояний (выбранное окно недели, выбранная точка зрения, состояние модального окна редактирования, массив атомов, буфер обмена, стек действий, производные сводки). Третья --- стек \emph{undo}/\emph{redo} с фиксированной глубиной \texttt{HISTORY\_\allowbreak LIMIT~=~100}; в стеке различают четыре типа записей действий (добавление и удаление атомов, замена, изменение точки зрения), а в очередь всплывающих уведомлений добавляется отдельная запись с возможностью отмены последней операции (см. листинг~\ref{lst:web-undo-redo}).
+
+Поверх атомарной модели реализована двухфазная схема публикации изменений: фаза подготовки накапливает дельты атомов в локальном состоянии редактора, фаза публикации открывает сводный диалог с перечнем изменений, выполняет серверную валидацию ресурсных коллизий по преподавателю, аудитории и группе и при их отсутствии публикует весь набор изменений единой транзакцией. При наличии конфликтов кнопка публикации блокируется, и пользователю предъявляется список конфликтов с переходом к соответствующим занятиям. Общий вид редактора расписания приведён на рис.~\ref{fig:web-admin-editor}.
+
+\begin{figure}[h]
+  \centering
+  % TODO: заменить \fbox на \includegraphics{...} с реальным скриншотом редактора расписания.
+  \fbox{\parbox[c][6cm][c]{0.85\textwidth}{\centering\itshape Скриншот: редактор расписания --- сетка недели с карточками занятий, индикаторы изменённых атомов, кнопки публикации и отката, всплывающие подсказки}}
+  \caption{Редактор расписания в сервисе администрирования}
+  \label{fig:web-admin-editor}
+\end{figure}
 
 \subsubsection{Развёртывание}
-% TODO: контент
-Веб-часть развёртывается в контейнерах Docker на собственном сервере проекта. Текущая схема обновления: после push в основную ветку оператор инициирует пересборку контейнера по SSH; обновлённая версия становится доступной пользователям. Переход к автоматизированному pipeline планируется как одна из инфраструктурных задач следующего этапа.
+\label{subsubsec:impl-web-deploy}
 
-\subsection{CI/CD и публикация}
+Сборка веб-составляющей выполняется средствами Next.js в режиме \texttt{output:\,"standalone"}; вывод сборки --- самодостаточный набор файлов сервера и статики. Развёртывание упаковано в Docker по многоэтапному шаблону (\emph{multi-stage build}): первая стадия (\texttt{deps}) устанавливает зависимости средствами \texttt{npm~ci}, вторая (\texttt{builder}) выполняет \texttt{next~build}, третья (\texttt{runner}) запускает собранный сервер. Базовый образ --- \texttt{node:22-alpine}; сервер слушает порт \texttt{3000} и работает от непривилегированного пользователя \texttt{nextjs:nodejs} (UID 1001).
 
-\subsubsection{iOS: Xcode Archive и App Store Connect}
-% TODO: контент
-Релизные сборки iOS-приложения собираются локально через Xcode~Archive и загружаются в App Store Connect. Ранее использовался Xcode Cloud, однако в 2025 году он был ограничен на территории Российской Федерации, и команда перешла на ручной процесс.
+Контракт переменных окружения сервера зафиксирован файлом-примером в репозитории и включает: \texttt{VC\_\allowbreak API\_\allowbreak URL} (базовый адрес парсингового контура серверной части), \texttt{VC\_\allowbreak STATIC\_\allowbreak URL} (базовый адрес статики), \texttt{VC\_\allowbreak AUTH\_\allowbreak TOKEN} (общий клиентский ключ платформы, скрытый от браузера) и \texttt{VC\_\allowbreak API\_\allowbreak VERSION} (значение заголовка \texttt{X-API-Version}, по умолчанию --- \texttt{2}).
 
-\subsubsection{Android: Google Play и RuStore}
-% TODO: контент
-Android-приложение публикуется в Google Play и в RuStore. Точная конфигурация процесса сборки и загрузки (использование fastlane, Gradle Play Publisher либо ручной выгрузки) уточняется по итогам ревью репозитория.
+Развёртывание производится на собственном виртуальном сервере проекта; рабочий домен --- \texttt{vcourse.\allowbreak app}. Обновление выполняется в полуавтоматическом режиме: после слияния изменений в основную ветку оператор инициирует пересборку контейнера и его перезапуск по защищённому SSH-подключению. Переход к полностью автоматизированному pipeline на основе GitHub Actions либо аналогичной системы непрерывной интеграции вынесен в задачи дальнейшего развития (см.~п.~\ref{subsec:impl-eval}).
 
-\subsubsection{Web: контейнерная сборка и деплой}
-% TODO: контент
-Веб-часть собирается в Docker-образ и развёртывается на сервере проекта. Процесс автоматизации деплоя описан выше.
+Полный обзор основных экранов веб-составляющей --- страниц лендинга, десктопной и мобильной раскладок веб-приложения просмотра расписания, экранов веб-сервиса администрирования и редактора расписания --- собран в приложении~В.
 
 \subsection{Апробация и метрики использования}
+\label{subsec:impl-eval}
+
+В настоящем разделе представлены результаты публичной эксплуатации платформы <<ВКурсе>>: каналы и сроки публикации клиентских приложений, количественные показатели использования, организация пользовательской обратной связи, выступления на инвестиционных и грантовых площадках, ход переговоров с учебными заведениями, а также сводный перечень ограничений текущей реализации и перспектив дальнейшего развития.
 
 \subsubsection{Релизы в магазинах приложений}
-% TODO: контент
-iOS-приложение опубликовано в App~Store в сентябре 2025~года. В феврале 2026~года в составе крупного обновления выпущены Android-приложение в Google Play и RuStore, а также веб-лендинг и веб-приложение просмотра расписания. Публикация в трёх крупнейших каналах распространения --- один из ключевых аргументов практической значимости работы.
+\label{subsubsec:impl-eval-releases}
+
+Все три клиентских компонента платформы опубликованы в крупнейших каналах распространения. iOS-приложение выпущено в App~Store в сентябре~2025~года и с этого момента непрерывно поддерживается; текущая публикуемая версия --- \texttt{0.2.3} основного приложения и \texttt{0.2.1} расширения виджетов (см.~п.~\ref{subsubsec:impl-ios-release}). Android-приложение и веб-составляющая выпущены в составе общего крупного обновления в феврале~2026~года: Android-приложение --- одновременно в Google~Play и RuStore (текущая версия \texttt{0.1.5}, см.~п.~\ref{subsubsec:impl-android-release}); веб-составляющая --- по адресу \texttt{vcourse.\allowbreak app}~\cite{vcourse} (текущая версия пакета \texttt{0.1.1}, см.~п.~\ref{subsubsec:impl-web-deploy}). Сводное соответствие платформ, каналов распространения, текущих версий и дат первоначальной публикации приведено в таблице~\ref{tab:eval-channels}.
+
+\begin{table}[h]
+  \caption{Каналы распространения клиентских компонентов}
+  \label{tab:eval-channels}
+  \centering
+  \small
+  \begin{tabular}{p{0.20\textwidth} p{0.32\textwidth} p{0.18\textwidth} p{0.18\textwidth}}
+    \toprule
+    Платформа & Канал распространения & Версия & Первый релиз \\
+    \midrule
+    iOS     & App Store               & 0.2.3 & сентябрь~2025 \\
+    Android & Google Play             & 0.1.5 & февраль~2026 \\
+    Android & RuStore                 & 0.1.5 & февраль~2026 \\
+    Web     & \texttt{vcourse.app}    & 0.1.1 & февраль~2026 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Одновременная представленность во всех трёх крупнейших каналах распространения --- App~Store, Google~Play и RuStore --- является одним из ключевых аргументов практической значимости настоящей работы и обеспечивает охват подавляющего большинства пользовательских устройств в целевой аудитории.
 
 \subsubsection{Метрики использования}
-% TODO: вставить таблицы из knowledge-base/metrics-and-traction.md
-На середину мая 2026~года суммарное количество установок мобильных приложений превышает 3000, среднее число уникальных активных пользователей на мобильных платформах --- порядка 1000 в день. Распределение пользователей по платформам составляет: iOS~--- 79\%, Android~--- 19\%, Web~--- 1\%. Доминирование iOS объясняется тем, что приложение для iOS вышло первым, а Android и Web появились только в феврале 2026~года; распределение постепенно выравнивается.
+\label{subsubsec:impl-eval-metrics}
+
+По состоянию на середину мая~2026~года суммарное количество установок мобильных приложений превышает 3000, среднее число уникальных активных пользователей в сутки на мобильных платформах --- порядка 1000. В соответствии с требованием НФТ-6 на клиентской стороне персональные данные пользователей не собираются; агрегированные показатели формируются на серверной стороне по обезличенному идентификатору установки (заголовок \texttt{X-Installation-ID}, см.~п.~\ref{subsubsec:read-contract}).
+
+Распределение активной аудитории по платформам приведено в таблице~\ref{tab:eval-platforms}. Доминирование iOS объясняется хронологически: iOS-приложение выпущено в сентябре~2025~года, Android-приложение и веб-составляющая --- только в феврале~2026~года, что объясняет накопленный отрыв; распределение постепенно выравнивается за счёт прироста новых установок на Android.
+
+\begin{table}[h]
+  \caption{Распределение активной аудитории по платформам}
+  \label{tab:eval-platforms}
+  \centering
+  \small
+  \begin{tabular}{p{0.40\textwidth} c}
+    \toprule
+    Платформа & Доля активной аудитории, \% \\
+    \midrule
+    iOS               & 79 \\
+    Android           & 19 \\
+    Web (просмотр расписания) & 1 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+На стороне серверной части дополнительно собирается агрегированный поток обращений к API в разрезе подключённых учебных заведений; этот поток отражает фактическое распределение нагрузки между шестью омскими вузами, подключёнными к парсинговому контуру (см.~п.~\ref{subsubsec:two-backends}): Омский государственный университет имени Ф.~М.~Достоевского (ОмГУ), Сибирский государственный автомобильно-дорожный университет (СибАДИ), Омский государственный технический университет (ОмГТУ), Сибирский государственный университет физической культуры и спорта (СибГУФК), Сибирский институт бизнеса и информационных технологий (СИБИТ), Омский институт водного транспорта (ОИВТ~СГУВТ). Сводные показатели нагрузки по этим учебным заведениям приведены в таблице~\ref{tab:eval-universities}.
+
+\begin{table}[h]
+  \caption{Нагрузка по подключённым учебным заведениям}
+  \label{tab:eval-universities}
+  \centering
+  \small
+  \begin{tabular}{p{0.55\textwidth} c}
+    \toprule
+    Учебное заведение & Запросов к API в сутки \\
+    \midrule
+    Омский государственный университет (ОмГУ)                & 4840 \\
+    Сибирский государственный автомобильно-дорожный университет (СибАДИ) & 2562 \\
+    Омский государственный технический университет (ОмГТУ)   & 181 \\
+    СибГУФК, СИБИТ, ОИВТ~СГУВТ (суммарно)                    & менее 100 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Из таблицы~\ref{tab:eval-universities} видна сильная неравномерность распределения нагрузки: на два крупнейших подключённых учебных заведения приходится подавляющее большинство пользовательских обращений, что согласуется с относительными размерами их контингента и подтверждает корректность приоритизации интеграции при выборе пилотных площадок.
 
 \subsubsection{Telegram-канал и пользовательская обратная связь}
-% TODO: контент
-Сопровождение проекта в публичном поле ведётся через Telegram-канал <<ВКурсе: Расписание занятий>> с аудиторией более 400 подписчиков на момент написания работы. Канал используется для анонсов обновлений, новостей проекта и команды, а также как канал прямой пользовательской обратной связи: сообщения об ошибках, предложения и вопросы поступают в личку канала и используются при планировании развития продукта.
+\label{subsubsec:impl-eval-telegram}
+
+Публичное сопровождение проекта ведётся через Telegram-канал <<ВКурсе: Расписание занятий>> (\texttt{@vcourseapp}). Канал запущен летом 2025~года; на момент написания работы насчитывает более 410 подписчиков. Содержание канала включает анонсы обновлений клиентских приложений, новости команды и инфраструктуры проекта, оригинальные иллюстрации, формируемые силами команды, и публикации в формате Telegram~Stories. Помимо публичной коммуникации, канал выполняет роль основного входа пользовательской обратной связи: сообщения об ошибках, предложения по развитию продукта и общие вопросы пользователей направляются непосредственно в личную переписку канала и используются командой при формировании приоритетов очередной итерации.
+
+\subsubsection{Презентации инвесторам и грантовые конкурсы}
+\label{subsubsec:impl-eval-grants}
+
+Помимо публичной эксплуатации, апробация проекта включает участие в инвестиционных и грантовых программах региона. В апреле~2026~года команда выступила перед инвесторами в рамках фонда <<ТРАМПЛИН>>~\cite{tramplin} (Омск): по итогам выступления проект получил позиционный контакт с техноброкером фонда, при этом непосредственное инвестирование отложено до фиксации результатов первого пилотного внедрения в учебном заведении (см.~п.~\ref{subsubsec:impl-eval-partners}). В мае~2026~года команда прошла во второй этап грантового конкурса <<Студенческий стартап>> Фонда содействия инновациям~\cite{studstartup-fasie} и провела очное (онлайн) представление проекта членам экспертного жюри; результаты этапа ожидаются в июне--июле 2026~года и при положительном исходе обеспечат финансирование инфраструктурного и организационного развития проекта в течение последующего года.
 
 \subsubsection{Переговоры с учебными заведениями}
-% TODO: контент
-Институциональный диалог о пилотном внедрении ведётся с двумя омскими учебными заведениями. Письма о возможности сотрудничества были разосланы в 30 учебных заведений Омска; первый отклик получен от Омского государственного аграрного университета. 15~мая 2026~года состоялась первая очная встреча: команда представила экосистему, собрала требования и согласовала повторную встречу на середину июня 2026~года для перехода к обсуждению пилота. Зафиксирован также первичный интерес со стороны Сибирского института бизнеса и информационных технологий; очной встречи пока не состоялось.
+\label{subsubsec:impl-eval-partners}
+
+Институциональный диалог о переходе подключённых учебных заведений с парсинговой модели поставки данных на собственный SaaS-контур ведётся параллельно с публичной эксплуатацией клиентских приложений. Команда подготовила и разослала письма о возможности сотрудничества в тридцать учебных заведений города Омска; первый содержательный отклик получен от Омского государственного аграрного университета (ОмГАУ)~\cite{omgau}. 15~мая 2026~года в ОмГАУ состоялась первая очная встреча: команда представила экосистему платформы, собрала институциональные требования к процессу управления расписанием и согласовала с представителями учебно-методического управления повторную встречу на середину июня~2026~года для перехода к обсуждению условий пилотного внедрения. Параллельно зафиксирован первичный интерес со стороны Сибирского института бизнеса и информационных технологий (СИБИТ); очная встреча с представителями этого учебного заведения на момент написания работы не состоялась. Пилотное внедрение в ОмГАУ рассматривается командой как первая попытка перехода с парсингового на платформенный контур серверной части (см.~п.~\ref{subsubsec:two-backends}) и одновременно как первый прецедент полного цикла применения сервиса администрирования (см.~п.~\ref{subsec:impl-web}) в реальной операционной среде учебного заведения.
 
 \subsubsection{Ограничения текущей реализации и перспективы развития}
-% TODO: контент
-Существенным ограничением текущей реализации клиентской части является отсутствие автоматического тестирования. Это сознательная отговорка от тестирования на этапе быстрой продуктовой итерации в команде из двух человек: приоритет был отдан скорости вывода функциональности и подготовке к первому пилоту. Качество поддерживается продакшен-эксплуатацией с ежедневной активной аудиторией около 1000 пользователей и пользовательской обратной связью через Telegram-канал. Введение автоматических тестов запланировано после стабилизации API SaaS-сервиса по итогам первого пилотного внедрения; приоритеты --- контрактные тесты сетевого слоя на iOS и Android и сквозные тесты критических флоу веб-сервиса администрирования. Среди других направлений развития: реализация виджетов в Android-приложении, расширение функционала для преподавателей, проработка модели подписки на премиум-возможности и юридическое оформление команды.
+\label{subsubsec:impl-eval-future}
+
+Текущая реализация клиентской части обладает рядом сознательно принятых ограничений, обусловленных этапом разработки и составом команды.
+
+\begin{enumerate}
+  \item Отсутствие автоматизированного тестирования на клиентской стороне. Это решение мотивировано приоритетом скорости вывода функциональности на этапе подготовки к первому пилотному внедрению и компенсируется продакшен-эксплуатацией с ежедневной аудиторией около 1000 пользователей и оперативной обратной связью через Telegram-канал.
+  \item Отсутствие автоматизированного непрерывного интеграционного процесса (CI/CD) для клиентских компонентов. Релизные сборки на момент написания работы создаются на рабочей станции разработчика и публикуются вручную; соответствующие процессы зафиксированы в п.~\ref{subsubsec:impl-ios-release}, п.~\ref{subsubsec:impl-android-release} и п.~\ref{subsubsec:impl-web-deploy}.
+  \item Отсутствие платформенного контура серверной части у подключённых учебных заведений: на момент написания работы все шесть подключённых омских вузов обслуживаются исключительно парсинговым контуром.
+\end{enumerate}
+
+Основные направления дальнейшего развития платформы сгруппированы по уровням приоритета.
+
+\begin{enumerate}
+  \item Завершение разработки веб-сервиса администрирования и проведение первого пилотного внедрения в Омском государственном аграрном университете с переводом учебного заведения с парсингового на платформенный контур.
+  \item Расширение мобильных клиентов отдельными экранами справочных сущностей. Для каждого из шести типов сущностей --- учебной группы, преподавателя, аудитории, факультета, кафедры и корпуса --- планируется реализовать собственный экран с карточкой метаданных (название, принадлежность, контакты, адрес для аудиторий и корпусов) и списком связанных сущностей по структуре учебного заведения: для факультета --- его кафедры и учебные группы, для кафедры --- её преподаватели, для корпуса --- его аудитории. С карточки конкретного занятия (см.~рис.~\ref{fig:ios-schedule},~рис.~\ref{fig:android-schedule}) становятся возможными переходы на соответствующие экраны участников пары --- преподавателя, группы и аудитории. Реализация этого направления согласована с расширением доменной модели мобильных клиентов до полного перечня административных сущностей (см.~п.~\ref{subsubsec:domain-model}), которое становится осуществимым по мере подключения учебных заведений к платформенному контуру.
+  \item Расширение возможностей веб-сервиса администрирования инструментами анализа нагрузки и аудиторного фонда. Запланировано добавление визуализации нагрузки преподавателей и учебных групп в разрезе дней, недель и семестров; отдельного экрана занятости аудиторий в формате тепловой карты <<аудитории~$\times$~временные слоты>>, обеспечивающего быстрый поиск свободных промежутков для составителя расписания; а также подсистемы отчётов и выгрузки данных нагрузки и расписания в форматы XLS и PDF, принятые в учётной работе учебных отделов.
+  \item Реализация системных push-уведомлений о заменах и переносах занятий средствами APNs (на iOS) и FCM (на Android); серверная часть платформы при этом подписывает мобильный клиент на изменения выбранных учебным заведением сущностей и доставляет уведомления при их актуализации.
+  \item Внедрение автоматизированного тестирования: контрактные тесты сетевого слоя на iOS и Android, сквозные тесты критических потоков веб-сервиса администрирования.
+  \item Настройка непрерывной интеграции и автоматических релизов для всех трёх клиентских компонентов средствами GitHub Actions или аналогичной системы; для Android --- параллельная настройка отдельной production-релизной подписи в составе автоматизированного pipeline.
+  \item Реализация системных виджетов рабочего стола в Android-приложении (Jetpack~Glance), что позволит достичь функционального паритета с iOS-клиентом (см.~п.~\ref{subsubsec:impl-ios-widgets}).
+  \item Введение динамической темизации Material~You в Android-приложении в качестве дополнительного режима оформления поверх существующих девяти фирменных цветовых схем (см.~п.~\ref{subsubsec:impl-android-ui}).
+  \item Локализация интерфейса клиентских приложений на дополнительные иностранные языки для возможности международного применения платформы.
+  \item Юридическое оформление команды и регистрация программного обеспечения в Федеральной службе по интеллектуальной собственности (Роспатент) по итогам грантового конкурса <<Студенческий стартап>>.
+\end{enumerate}
+
+Перечисленные направления развития формируют дорожную карту проекта на ближайший годовой цикл и являются основанием для перехода платформы из режима пилотной эксплуатации в режим полноценного промышленного решения.
