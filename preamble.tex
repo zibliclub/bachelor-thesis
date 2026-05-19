@@ -26,6 +26,15 @@
 \usepackage{setspace}
 \onehalfspacing
 
+% --- Line breaking for long Russian compounds ------------------------------
+% Allow TeX to stretch interword spacing further before declaring "overfull
+% hbox" on a line containing long Russian compounds (HTTP-клиентом, реляционно-
+% ориентированное и т.п.). Combined with explicit \- hints below this keeps
+% the body free of overfull lines without resorting to \sloppy.
+\setlength{\emergencystretch}{3em}
+\hyphenation{ре-ля-ци-он-но HTTP-кли-ен-том BFF-про-кси DTO стек-ори-ен-ти-ро-ван-ная
+  изо-мор-физм идиома-ти-че-ский ис-поль-зу-ет-ся}
+
 % --- Paragraph indent ------------------------------------------------------
 \usepackage{indentfirst}
 \setlength{\parindent}{1.25cm}
