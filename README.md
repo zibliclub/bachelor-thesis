@@ -43,14 +43,25 @@ The title page follows the OmSU template; all of its text is parametrised — fi
 ```text
 .
 ├── main.tex                        # entry point — \input's the rest
-├── preamble.tex                    # packages, geometry, fonts, headings, ToC, metadata API
+├── preamble.tex                    # packages, geometry, fonts, headings, ToC, listings, metadata API
 ├── meta.tex                        # student / advisor / topic / department / year
 ├── titlepage.tex                   # OmSU title page, driven entirely by meta.tex
 ├── sections/
-│   └── 01-introduction.tex         # one file per chapter; numeric prefix sets order
-├── appendices/                     # appendices (А, Б, В, …) when needed
-├── images/                         # figures referenced by \includegraphics
-├── bib/                            # bibliography sources (biblatex-gost when added)
+│   ├── 00-introduction.tex         # Введение
+│   ├── 01-analysis.tex             # Глава 1. Анализ предметной области и постановка задачи
+│   ├── 02-design.tex               # Глава 2. Проектирование клиентской части платформы
+│   ├── 03-implementation.tex       # Глава 3. Реализация клиентских приложений
+│   ├── 99-conclusion.tex           # Заключение
+│   └── bibliography.tex            # Список литературы (thebibliography, ГОСТ 7.0.5-2008)
+├── appendices/
+│   ├── _appendices.tex             # manifest, \input's А-Г in order
+│   ├── a-ios.tex                   # Приложение А. Скриншоты iOS-приложения
+│   ├── b-android.tex               # Приложение Б. Скриншоты Android-приложения
+│   ├── v-web.tex                   # Приложение В. Скриншоты веб-составляющей
+│   └── g-code.tex                  # Приложение Г. Фрагменты ключевого кода
+├── images/                         # screenshots referenced by \includegraphics (filled during final stage)
+├── knowledge-base/                 # source notes that feed the chapters (project context, glossary, per-client reviews)
+├── bib/                            # stub for a possible biblatex-gost migration; not active in the build
 ├── Makefile                        # build / watch / clean / release targets
 ├── .latexmkrc                      # latexmk configuration (engine = lualatex, out_dir = out/)
 ├── .github/workflows/build-pdf.yml # CI: build on tag push, publish PDF to release
@@ -155,9 +166,9 @@ The university's formatting requirements live in [`requirements.md`](./requireme
 - Body: 14 pt, line spacing 1.5, paragraph indent 1.25 cm.
 - Headings: bold, left-aligned with paragraph indent, no trailing period.
 - Page numbers: bottom centre, continuous; not printed on the title page.
-- Captions: `Рис. N. …` below figures, `Таблица N. …` above tables (12 pt).
-- Bibliography: GOST 7.0.5-2008 (`biblatex-gost`).
-- Appendices labelled with the Cyrillic letters А, Б, В, … (Ё, З, Й, О, Ч, Ь, Ы, Ъ skipped).
+- Captions: `Рис. N. …` below figures, `Таблица N. …` above tables (12 pt), `Листинг N. …` below code listings.
+- Bibliography: ГОСТ 7.0.5-2008 — native `thebibliography` in `sections/bibliography.tex` (no BibTeX/biber dependency).
+- Appendices labelled with the Cyrillic letters А, Б, В, … (Ё, З, Й, О, Ч, Ь, Ы, Ъ skipped); figures, tables and listings inside an appendix carry the letter as prefix (`Рис. А.1`, `Таблица В.1`, `Листинг Г.1`).
 
 If `requirements.md` and the `.tex` sources ever disagree, `requirements.md` wins.
 
