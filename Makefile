@@ -8,7 +8,7 @@
 SHELL := /bin/bash
 
 LATEXMK       := latexmk
-LATEXMK_FLAGS := -lualatex -interaction=nonstopmode -file-line-error -halt-on-error
+LATEXMK_FLAGS := -lualatex -interaction=nonstopmode -file-line-error -f
 MAIN          := main.tex
 
 # Asset name in the published GitHub release (see .github/workflows/build-pdf.yml).
