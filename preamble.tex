@@ -84,18 +84,18 @@
 }
 
 % --- Heading style ---------------------------------------------------------
-% Chapters (\section): 16pt; sections and subsections: 14pt.
+% Chapters (\section): 16pt with «Глава N.» prefix; sections and subsections: 14pt.
 % All headings: bold, left-aligned with paragraph indent, no trailing period.
 \usepackage{titlesec}
 \titleformat{\section}
   {\normalfont\fontsize{16pt}{19pt}\bfseries}
-  {\thesection.}{0.5em}{}
+  {\hspace*{\parindent}Глава \thesection.}{0.5em}{}
 \titleformat{\subsection}
   {\normalfont\fontsize{14pt}{17pt}\bfseries}
-  {\thesubsection.}{0.5em}{}
+  {\hspace*{\parindent}\thesubsection.}{0.5em}{}
 \titleformat{\subsubsection}
   {\normalfont\fontsize{14pt}{17pt}\bfseries}
-  {\thesubsubsection.}{0.5em}{}
+  {\hspace*{\parindent}\thesubsubsection.}{0.5em}{}
 
 % Unnumbered chapter-level headings — Introduction, Conclusion, References,
 % Appendices, Table of Contents. New page, paragraph indent, left-aligned, 16pt bold.
@@ -118,6 +118,8 @@
 
 \renewcommand{\cftsecfont}{\bfseries}
 \renewcommand{\cftsecpagefont}{\bfseries}
+\renewcommand{\cftsecpresnum}{Глава~}
+\addtolength{\cftsecnumwidth}{3.7em}
 
 \renewcommand{\cftsubsecfont}{\mdseries}
 \renewcommand{\cftsubsecpresnum}{\bfseries}
@@ -161,16 +163,87 @@
   \noindent\hspace*{\parindent}%
     \textbf{\fontsize{16pt}{19pt}\selectfont Приложение #1. #2}\par
   \vspace{\baselineskip}%
+  % Per requirements.md §3: figures, tables and listings inside appendices are
+  % renumbered with the appendix letter as prefix (Рис. А.1, Таблица В.1,
+  % Листинг Г.1, …).
+  \renewcommand{\thefigure}{#1.\arabic{figure}}%
+  \renewcommand{\thetable}{#1.\arabic{table}}%
+  \renewcommand{\thelstlisting}{#1.\arabic{lstlisting}}%
+  \setcounter{figure}{0}%
+  \setcounter{table}{0}%
+  \setcounter{lstlisting}{0}%
 }
 
 % --- Bibliography choice ---------------------------------------------------
-% Manual numbered list in sections/bibliography.tex (per ГОСТ 7.0.5-2008).
-% Rationale: keeps the build hermetic and avoids a biblatex-gost dependency
-% during scaffolding. If automated bibliography handling is later needed,
-% switch to biblatex with style=gost-numeric and a bib/sources.bib database.
+% Native LaTeX `thebibliography` environment with `\bibitem{key}` entries
+% (per ГОСТ 7.0.5-2008). Citations in text use `\cite{key}`; numbering and
+% hyperlinks are produced automatically by LaTeX + hyperref. The default
+% `\section*{\refname}` header that `thebibliography` emits is suppressed
+% below — the «Список литературы» heading is rendered by `\thesisChapterStar`
+% in sections/bibliography.tex to match the project heading style.
+
+% --- Code listings ---------------------------------------------------------
+% Package `listings` for source-code excerpts in the appendices. Captions are
+% rendered as «Листинг N. Title» (period separator, per requirements.md §3
+% conventions for figures/tables); the listing counter is renumbered with the
+% appendix letter as prefix inside \thesisAppendix (Листинг Г.1, ...).
+\usepackage{listings}
+\renewcommand{\lstlistingname}{Листинг}
+\lstdefinestyle{thesiscode}{
+  basicstyle=\ttfamily\footnotesize,
+  numbers=left,
+  numberstyle=\tiny,
+  numbersep=8pt,
+  frame=single,
+  framerule=0.3pt,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  keepspaces=true,
+  tabsize=2,
+  captionpos=b,
+  xleftmargin=12pt,
+  belowcaptionskip=4pt,
+  abovecaptionskip=4pt,
+}
+\lstset{style=thesiscode}
+\captionsetup[lstlisting]{
+  labelsep=period,
+  justification=centering,
+}
 
 % --- Hyperlinks (must be loaded last) --------------------------------------
 \usepackage[hidelinks, unicode]{hyperref}
+% xurl allows breaking long URLs at any character (after `/`, `-`, `.`),
+% needed for bibliography entries with long path-style URLs.
+\usepackage{xurl}
+
+% --- thebibliography without auto-emitted section header --------------------
+% Standard article-class definition with the leading `\section*{\refname}` and
+% `\@mkboth{...}` lines removed. List body is preserved.
+% `\@biblabel` is redefined to render entry labels as «N.» instead of «[N]»
+% per requirements.md §6 (нумерованный список арабскими цифрами с точкой).
+% This affects only the bibliography list; in-text citations from `\cite{}`
+% continue to use «[N]» format via `\@cite` (per requirements.md §5).
+\makeatletter
+\renewcommand*\@biblabel[1]{#1.}
+\renewenvironment{thebibliography}[1]
+  {\list{\@biblabel{\@arabic\c@enumiv}}%
+        {\settowidth\labelwidth{\@biblabel{#1}}%
+         \leftmargin\labelwidth
+         \advance\leftmargin\labelsep
+         \usecounter{enumiv}%
+         \let\p@enumiv\@empty
+         \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+   \sloppy
+   \clubpenalty4000
+   \@clubpenalty\clubpenalty
+   \widowpenalty4000%
+   \sfcode`\.\@m}
+  {\def\@noitemerr
+    {\@latex@warning{Empty `thebibliography' environment}}%
+   \endlist}
+\makeatother
 
 % --- Metadata API (values are assigned in meta.tex) ------------------------
 \newcommand{\thesisMinistry}[1]{\gdef\thethesisMinistry{#1}}
