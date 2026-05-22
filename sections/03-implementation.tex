@@ -2,8 +2,6 @@
 % Источники: knowledge-base/clients/*.md, knowledge-base/04-product-features.md,
 %            knowledge-base/infra-and-ci.md, knowledge-base/metrics-and-traction.md,
 %            knowledge-base/pilots-and-partners.md, knowledge-base/apparobation-and-promo.md.
-%
-% Технические подразделы будут уточнены после ревью репозиториев клиентов.
 
 \clearpage
 \section{РЕАЛИЗАЦИЯ КЛИЕНТСКИХ ПРИЛОЖЕНИЙ}
@@ -298,7 +296,7 @@ Android-приложение реализовано на языке Kotlin~2.2.2
 \subsubsection{Сборка и публикация}
 \label{subsubsec:impl-android-release}
 
-Сборка Android-приложения выполняется средствами Gradle поверх Android Gradle Plugin~8.13.1 с целевым JDK~11; релизный артефакт --- Android App Bundle (\texttt{.aab}), создаваемый локально через интегрированную среду разработки Android~Studio (команда \emph{Build~$\to$~Generate Signed App Bundle}). Минификация и обфускация средствами R8 в текущей сборке отключены (\texttt{isMinifyEnabled = false}); правила \texttt{proguard-rules.pro} оставлены как заготовка под последующее включение. Настройка production-релизной подписи --- задача дальнейшего развития (см.~п.~3.5).
+Сборка Android-приложения выполняется средствами Gradle поверх Android Gradle Plugin~8.13.1 с целевым JDK~11; релизный артефакт --- Android App Bundle (\texttt{.aab}), создаваемый локально через интегрированную среду разработки Android~Studio (команда \emph{Build~$\to$~Generate Signed App Bundle}). Минификация и обфускация средствами R8 в текущей сборке отключены (\texttt{isMinifyEnabled = false}); правила \texttt{proguard-rules.pro} оставлены как заготовка под последующее включение. Настройка production-релизной подписи --- задача дальнейшего развития (см.~п.~\ref{subsubsec:impl-eval-future}).
 
 Распространение Android-приложения ведётся по двум каналам: \emph{Google Play} (с использованием механизма App~Signing~by~Google~Play, когда финальная подпись пользовательской сборки выполняется на стороне магазина) и \emph{RuStore} (отдельный канал распространения с собственным процессом загрузки). На момент написания работы публикуемая версия --- \texttt{0.1.5} (\texttt{versionCode}~$=$~\texttt{10}); первоначальная публикация в обоих магазинах --- февраль~2026~года. Результаты эксплуатации, включая количество установок и распределение пользователей по платформам, обсуждаются в общем разделе апробации (см.~п.~\ref{subsec:impl-eval}).
 
