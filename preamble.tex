@@ -108,21 +108,20 @@
 }
 
 % --- Table of contents -----------------------------------------------------
-% Look inspired by vcourse-document-template:
-%   - section: bold name + bold page number;
-%   - subsection: bold number, regular name and page;
-%   - uniform dot leaders on every level.
+% All entries (section + subsection, names and page numbers) use the regular
+% weight; only the "Содержание" heading itself stays bold per ВКР rules.
+% Uniform dot leaders on every level.
 % The "Содержание" heading itself follows ВКР formatting rules: capitalized first letter,
 % left-aligned with paragraph indent, bold, no trailing period.
 \usepackage{tocloft}
 
-\renewcommand{\cftsecfont}{\bfseries}
-\renewcommand{\cftsecpagefont}{\bfseries}
+\renewcommand{\cftsecfont}{\mdseries}
+\renewcommand{\cftsecpagefont}{\mdseries}
 \renewcommand{\cftsecpresnum}{Глава~}
 \addtolength{\cftsecnumwidth}{3.7em}
 
 \renewcommand{\cftsubsecfont}{\mdseries}
-\renewcommand{\cftsubsecpresnum}{\bfseries}
+\renewcommand{\cftsubsecpresnum}{\mdseries}
 \renewcommand{\cftsubsecaftersnum}{\mdseries}
 \renewcommand{\cftsubsecpagefont}{\mdseries}
 

@@ -9,11 +9,60 @@
 }
 
 \newcommand{\thesisSignatureLine}{%
-  \rule{2.2cm}{0.4pt}%
+  \rule{2.7cm}{0.4pt}%
 }
 
 \newcommand{\thesisDateLine}{%
   «\rule{0.8cm}{0.4pt}»~\rule{2.5cm}{0.4pt}~\thethesisYear~г.%
+}
+
+% Signature blocks. They are rendered left-aligned but share one common width
+% (\thesisBlockWidth, the widest of the three) so their left edges line up while
+% the whole stack still hugs the right margin.
+\newlength{\thesisBlockWidth}
+
+\newcommand{\thesisApprovedBlock}{%
+  \begin{tabular}{@{}l@{}}%
+    УТВЕРЖДАЮ\\
+    Заведующий кафедрой\\[2pt]
+    \thesisSignatureLine~\thethesisHeadName\\[2pt]
+    \thesisDateLine
+  \end{tabular}%
+}
+
+\newcommand{\thesisAdvisorBlock}{%
+  \begin{tabular}{@{}l@{}}%
+    Научный руководитель:\\
+    \thethesisAdvisorRank\\[2pt]
+    \thesisSignatureLine~\thethesisAdvisorName\\[2pt]
+    \thesisDateLine
+  \end{tabular}%
+}
+
+\newcommand{\thesisStudentBlock}{%
+  \begin{tabular}{@{}l@{}}%
+    Выполнил:\\
+    студент группы \thethesisStudentGroup\\[2pt]
+    \thesisSignatureLine~\thethesisStudentName\\[2pt]
+    \thesisDateLine
+  \end{tabular}%
+}
+
+% Measure all three blocks and keep the widest width.
+\newcommand{\thesiscomputeblockwidth}{%
+  \sbox0{\thesisApprovedBlock}%
+  \sbox2{\thesisAdvisorBlock}%
+  \sbox4{\thesisStudentBlock}%
+  \setlength{\thesisBlockWidth}{\wd0}%
+  \ifdim\wd2>\thesisBlockWidth \setlength{\thesisBlockWidth}{\wd2}\fi
+  \ifdim\wd4>\thesisBlockWidth \setlength{\thesisBlockWidth}{\wd4}\fi
+}
+
+% Render one block left-aligned inside the shared width, flush against the right margin.
+\newcommand{\thesissignatureblock}[1]{%
+  \begin{flushright}%
+    \makebox[\thesisBlockWidth][l]{#1}%
+  \end{flushright}%
 }
 
 \newcommand{\makethesistitle}{%
@@ -21,8 +70,9 @@
     \thispagestyle{thesistitle}%
     \begin{singlespace}%
     \setlength{\parindent}{0pt}%
+    \thesiscomputeblockwidth
     \begin{center}
-      \textbf{\thethesisMinistry}\\[2pt]
+      \thethesisMinistry\\[2pt]
       \thethesisInstitutionLong\\[2pt]
       \thethesisUniversity\\[2pt]
       \thethesisDepartment
@@ -30,22 +80,13 @@
 
     \vspace{12mm}
 
-    % "Approved by" block — right-aligned
-    \begin{flushright}
-      \begin{minipage}{0.55\textwidth}
-        \raggedright
-        УТВЕРЖДАЮ\\
-        Заведующий кафедрой\\[2pt]
-        \thethesisHeadName\\[2pt]
-        \thesisDateLine
-      \end{minipage}
-    \end{flushright}
+    \thesissignatureblock{\thesisApprovedBlock}
 
     \vspace{20mm}
 
     % Thesis title
     \begin{center}
-      {\fontsize{16pt}{20pt}\selectfont\bfseries \thethesisTitle\par}
+      {\fontsize{16pt}{20pt}\selectfont \thethesisTitle\par}
 
       \vspace{10mm}
 
@@ -55,29 +96,11 @@
 
     \vspace{18mm}
 
-    % Academic advisor
-    \begin{flushright}
-      \begin{minipage}{0.55\textwidth}
-        \raggedright
-        Научный руководитель:\\
-        \thethesisAdvisorRank\\[2pt]
-        \thethesisAdvisorName\\[2pt]
-        \thesisDateLine
-      \end{minipage}
-    \end{flushright}
+    \thesissignatureblock{\thesisAdvisorBlock}
 
     \vspace{10mm}
 
-    % Student
-    \begin{flushright}
-      \begin{minipage}{0.55\textwidth}
-        \raggedright
-        Выполнил:\\
-        студент группы \thethesisStudentGroup\\[2pt]
-        \thethesisStudentName\\[2pt]
-        \thesisDateLine
-      \end{minipage}
-    \end{flushright}
+    \thesissignatureblock{\thesisStudentBlock}
 
     \vfill
 
